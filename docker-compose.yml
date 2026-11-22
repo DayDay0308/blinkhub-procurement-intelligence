@@ -1,0 +1,43 @@
+# BlinkHub Procurement Intelligence — local stack
+#   docker compose up --build
+#   API docs: http://localhost:8000/docs
+# Services are added phase by phase (Redis/workers and MinIO arrive with the
+# invoice workflow and document features).
+
+name: blinkhub
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blinkhub
+      POSTGRES_USER: ${POSTGRES_USER:-blinkhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blinkhub}
+    ports:
+      - "5432:5432"          # exposed so Power BI Desktop / DBeaver can connect
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d blinkhub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-blinkhub}:${POSTGRES_PASSWORD:-blinkhub}@db:5432/blinkhub
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-0123456789}
+      SEED_ON_START: ${SEED_ON_START:-true}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@2026!}
+      CORS_ORIGINS: '["http://localhost:5173"]'
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

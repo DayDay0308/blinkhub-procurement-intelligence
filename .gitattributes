@@ -1,0 +1,3 @@
+# Keep shell scripts LF on Windows checkouts, or the container fails to start
+*.sh text eol=lf
+* text=auto
