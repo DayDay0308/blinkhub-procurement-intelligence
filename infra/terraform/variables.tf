@@ -50,3 +50,8 @@ variable "github_repo" {
   type        = string
   default     = ""
 }
+variable "github_oidc_subject" {
+  description = "Exact identity GitHub sends (now includes owner and repo IDs). Copy it from CloudTrail."
+  type        = string
+  default     = ""
+}
