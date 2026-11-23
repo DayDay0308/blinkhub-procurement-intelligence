@@ -20,7 +20,6 @@ jobs:
   deploy:
     if: vars.AWS_DEPLOY_ROLE_ARN != ''
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -32,7 +31,7 @@ jobs:
             --instance-ids "${{ vars.AWS_INSTANCE_ID }}" \
             --document-name AWS-RunShellScript \
             --comment "BlinkHub deploy ${GITHUB_SHA::7}" \
-            --parameters 'commands=["sudo /opt/blinkhub/deploy/update.sh"],executionTimeout=["1800"]' \
+            --parameters 'commands=["sudo bash /opt/blinkhub/deploy/update.sh"],executionTimeout=["1800"]' \
             --query Command.CommandId --output text)
           echo "SSM command $id"
           for i in $(seq 1 90); do
