@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Bell, FileCheck2, FileText, Gauge, LogOut, PackageCheck, PlusCircle, ShieldAlert, Star, Users } from "lucide-react";
+import { Bell, FileCheck2, Sparkles, FileText, Gauge, LogOut, PackageCheck, PlusCircle, ShieldAlert, Star, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -18,6 +18,7 @@ const STAFF: Role[] = ["ADMIN", "PROCUREMENT_OFFICER", "FINANCE_OFFICER", "APPRO
 
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: Gauge, roles: STAFF },
+  { to: "/ask", label: "Ask BlinkHub", icon: Sparkles, roles: STAFF },
   { to: "/invoices", label: "Invoices", icon: FileText, roles: STAFF },
   { to: "/purchase-orders", label: "Purchase orders", icon: PackageCheck, roles: ["ADMIN", "PROCUREMENT_OFFICER", "FINANCE_OFFICER", "MANAGER", "AUDITOR"] },
   { to: "/risk", label: "Risk monitoring", icon: ShieldAlert, roles: ["ADMIN", "PROCUREMENT_OFFICER", "FINANCE_OFFICER", "MANAGER", "AUDITOR"] },

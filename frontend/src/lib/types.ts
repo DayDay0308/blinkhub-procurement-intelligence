@@ -156,6 +156,15 @@ export interface SupplierDocument {
   verified_at: string | null;
   rejection_reason: string | null;
   has_file: boolean;
+  extracted: Extracted | null;
+}
+
+export interface Extracted {
+  method: "AI" | "TEXT_RULES" | "NONE";
+  fields: { entity_name?: string | null; document_kind?: string | null; issue_date?: string | null; expiry_date?: string | null; bbbee_level?: number | null; reference_number?: string | null };
+  confidence: number;
+  checks: { name_matches?: boolean; name_similarity?: number; not_expired?: boolean; type_matches?: boolean; dates_consistent?: boolean };
+  note: string | null;
 }
 
 export interface SupplierDocuments {
@@ -163,4 +172,18 @@ export interface SupplierDocuments {
   state: ComplianceState | null;
   requirements: Requirement[];
   documents: SupplierDocument[];
+}
+
+export interface AskAnswer {
+  question: string;
+  method: "AI" | "TEMPLATE";
+  answered: boolean;
+  title: string;
+  explanation: string;
+  sql: string | null;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  truncated: boolean;
+  duration_ms?: number;
+  suggestions?: { id: string; question: string }[];
 }

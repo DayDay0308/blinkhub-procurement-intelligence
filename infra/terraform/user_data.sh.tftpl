@@ -1,0 +1,7 @@
+#!/bin/bash
+# Runs once at first boot. The real work is in deploy/bootstrap.sh (versioned with the app).
+set -euo pipefail
+export REPO_URL="${repo_url}" BRANCH="${branch}" DOMAIN="${domain}" DOCUMENT_BUCKET="${document_bucket}" AWS_REGION="${region}"
+apt-get update -q && apt-get install -y -q git
+rm -rf /tmp/blinkhub-src && git clone --branch "$BRANCH" --depth 1 "$REPO_URL" /tmp/blinkhub-src
+bash /tmp/blinkhub-src/deploy/bootstrap.sh

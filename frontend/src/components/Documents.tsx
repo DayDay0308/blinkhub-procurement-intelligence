@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { api, openFile } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { date, dateTime, label } from "../lib/format";
-import type { ComplianceState, Requirement, SupplierDocument, SupplierDocuments } from "../lib/types";
+import type { ComplianceState, Extracted, Requirement, SupplierDocument, SupplierDocuments } from "../lib/types";
 import { Badge, Button, ErrorNote, Field, inputCls, Loading, Modal, Panel } from "./ui";
 
 /** Status of one requirement: icon + words, never colour alone. */
@@ -83,10 +83,10 @@ export function SupplierDocumentsView({ supplierId, canUpload }: { supplierId: s
                   <div className="flex flex-wrap items-center gap-2">
                     <FileText className="size-4 text-muted" aria-hidden />
                     <span className="font-medium">{docTypeLabel(doc.doc_type)}</span>
-                    <Badge tone={DOC_STATUS_TONE[doc.status]}>{doc.status === "UPLOADED" ? "Waiting for verification" : label(doc.status)}</Badge>
+                    <Badge tone={DOC_STATUS_TONE[doc.status]}>{doc.status === "UPLOADED" || doc.status === "EXTRACTED" ? "Waiting for verification" : label(doc.status)}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted">
-                    {doc.expiry_date ? `${doc.status === "UPLOADED" ? "Stated expiry" : "Expires"} ${date(doc.expiry_date)}` : "No expiry date yet"} · uploaded {dateTime(doc.uploaded_at)}
+                    {doc.expiry_date ? `${doc.status === "UPLOADED" || doc.status === "EXTRACTED" ? "Stated expiry" : "Expires"} ${date(doc.expiry_date)}` : "No expiry date yet"} · uploaded {dateTime(doc.uploaded_at)}
                     {doc.original_filename && ` · ${doc.original_filename}`}
                   </div>
                   {doc.rejection_reason && <div className="mt-1 text-sm text-bad">Not accepted: {doc.rejection_reason}</div>}
@@ -153,11 +153,16 @@ export function ReviewDialog({ supplierId, supplierName, documentId, onClose }: 
   const [issue, setIssue] = useState("");
   const [expiry, setExpiry] = useState("");
   const [reason, setReason] = useState("");
-  const [mode, setMode] = useState<"verify" | "reject">("verify");
+  const [mode, setMode] = useState<"verify" | "reject" | null>(null);
   const [openError, setOpenError] = useState<unknown>(null);
   const qc = useQueryClient();
   const done = () => { ["documents", "compliance", "scorecards"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); onClose(); };
-  const verify = useMutation({ mutationFn: () => api(`/compliance/documents/${documentId}/verify`, { body: { issue_date: issue, expiry_date: expiry || doc?.expiry_date } }), onSuccess: done });
+  const read = doc?.extracted?.method !== "NONE" ? doc?.extracted : null;
+  const failed = read ? Object.entries(read.checks).some(([k, v]) => k !== "name_similarity" && v === false) : false;
+  const chosen = mode ?? (failed ? "reject" : "verify"); // a document that fails a check opens on "Send it back"
+  const issueValue = issue || read?.fields.issue_date || "";
+  const expiryValue = expiry || read?.fields.expiry_date || doc?.expiry_date || "";
+  const verify = useMutation({ mutationFn: () => api(`/compliance/documents/${documentId}/verify`, { body: { issue_date: issueValue, expiry_date: expiryValue } }), onSuccess: done });
   const reject = useMutation({ mutationFn: () => api(`/compliance/documents/${documentId}/reject`, { body: { reason } }), onSuccess: done });
 
   return (
@@ -175,16 +180,17 @@ export function ReviewDialog({ supplierId, supplierName, documentId, onClose }: 
             ) : <p className="mt-1 text-xs text-muted">Demonstration record: there is no file to open.</p>}
           </div>
           <ErrorNote error={openError} />
+          {read && <ReadFromDocument read={read} supplierName={supplierName} />}
           <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-1.5"><input type="radio" checked={mode === "verify"} onChange={() => setMode("verify")} /> It's correct</label>
-            <label className="flex items-center gap-1.5"><input type="radio" checked={mode === "reject"} onChange={() => setMode("reject")} /> Send it back</label>
+            <label className="flex items-center gap-1.5"><input type="radio" checked={chosen === "verify"} onChange={() => setMode("verify")} /> It's correct</label>
+            <label className="flex items-center gap-1.5"><input type="radio" checked={chosen === "reject"} onChange={() => setMode("reject")} /> Send it back</label>
           </div>
-          {mode === "verify" ? (
+          {chosen === "verify" ? (
             <form onSubmit={(e) => { e.preventDefault(); verify.mutate(); }} className="space-y-4">
-              <p className="text-sm text-muted">Copy the dates from the document itself.</p>
+              <p className="text-sm text-muted">{read ? "Dates are filled in from the document. Compare them with the file before you verify." : "Copy the dates from the document itself."}</p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Issue date"><input className={inputCls} type="date" required value={issue} onChange={(e) => setIssue(e.target.value)} /></Field>
-                <Field label="Expiry date"><input className={inputCls} type="date" required value={expiry || doc.expiry_date || ""} onChange={(e) => setExpiry(e.target.value)} /></Field>
+                <Field label="Issue date"><input className={inputCls} type="date" required value={issueValue} onChange={(e) => setIssue(e.target.value)} /></Field>
+                <Field label="Expiry date"><input className={inputCls} type="date" required value={expiryValue} onChange={(e) => setExpiry(e.target.value)} /></Field>
               </div>
               {user && <p className="text-xs text-muted">Recorded in the audit log as verified by {user.full_name}. You can't verify a document you uploaded yourself.</p>}
               <ErrorNote error={verify.error} />
@@ -208,5 +214,42 @@ export function ReviewDialog({ supplierId, supplierName, documentId, onClose }: 
         </div>
       )}
     </Modal>
+  );
+}
+
+/** What was read off the document, and which checks passed. Suggestions only. */
+function ReadFromDocument({ read, supplierName }: { read: Extracted; supplierName: string }) {
+  const f = read.fields;
+  const c = read.checks;
+  const checks = [
+    c.name_matches !== undefined && { ok: c.name_matches, text: c.name_matches ? `Name matches ${supplierName}` : `Name on the document is "${f.entity_name}", not ${supplierName}` },
+    c.type_matches !== undefined && { ok: c.type_matches, text: c.type_matches ? "It's the expected kind of document" : `It looks like a ${docTypeLabel(f.document_kind ?? "OTHER")}, not what was selected` },
+    c.not_expired !== undefined && { ok: c.not_expired, text: c.not_expired ? "Not expired" : "Already expired" },
+    c.dates_consistent === false && { ok: false, text: "Expiry date is before the issue date" },
+  ].filter(Boolean) as { ok: boolean; text: string }[];
+  return (
+    <div className="rounded-md border border-line px-3 py-2.5 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">Read from the document</span>
+        <span className="text-xs text-muted">{read.method === "AI" ? "by the AI model" : "from the PDF text"} · {Math.round(read.confidence * 100)}% confident</span>
+      </div>
+      <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs">
+        {f.entity_name && <><dt className="text-muted">Name</dt><dd>{f.entity_name}</dd></>}
+        {f.bbbee_level && <><dt className="text-muted">B-BBEE level</dt><dd>Level {f.bbbee_level}</dd></>}
+        {f.reference_number && <><dt className="text-muted">Reference</dt><dd>{f.reference_number}</dd></>}
+        {f.issue_date && <><dt className="text-muted">Issued</dt><dd>{date(f.issue_date)}</dd></>}
+        {f.expiry_date && <><dt className="text-muted">Expires</dt><dd>{date(f.expiry_date)}</dd></>}
+      </dl>
+      {checks.length > 0 && (
+        <ul className="mt-2 space-y-0.5">
+          {checks.map((k) => (
+            <li key={k.text} className={`flex items-center gap-1.5 text-xs ${k.ok ? "text-good" : "font-semibold text-bad"}`}>
+              {k.ok ? <CheckCircle2 className="size-3.5" aria-hidden /> : <AlertTriangle className="size-3.5" aria-hidden />}{k.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      {read.note && <p className="mt-1.5 text-xs text-muted">{read.note}</p>}
+    </div>
   );
 }

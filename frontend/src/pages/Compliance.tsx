@@ -58,8 +58,8 @@ export function Compliance() {
 
       {reviewer && toReview.length > 0 && (
         <Panel title={`Waiting for you to check (${toReview.length})`} className="mb-5">
-          <ul className="-my-4 divide-y divide-line-soft">
-            {toReview.slice(0, 8).map(({ item, r }) => (
+          <ul className="-mx-4 -my-4 max-h-96 divide-y divide-line-soft overflow-y-auto px-4">
+            {toReview.map(({ item, r }) => (
               <li key={r.pending_document_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <div className="font-semibold">{item.supplier.legal_name}</div>

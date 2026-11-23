@@ -235,6 +235,25 @@ Every active supplier needs a **valid tax clearance** and a **B-BBEE certificate
 
 Demo: sign in as **Thuto Supplies** → My documents (B-BBEE expired, tax clearance expiring in 12 days) → upload `demo-documents/Thuto_Supplies_BBBEE_Certificate_DEMO.pdf` → sign in as **Palesa (procurement)** → Supplier compliance → Check document → verify → Thuto is valid again.
 
+### AI features (work without a key; better with one)
+
+Set `ANTHROPIC_API_KEY` in `.env` to use an AI model; leave it empty and both features fall back to rules. If the AI service is slow or down, they fall back automatically.
+
+**Reading certificates.** When a document is uploaded, BlinkHub reads the company name, document type, B-BBEE level, reference number, and issue and expiry dates:
+
+| | Without a key | With a key |
+|---|---|---|
+| Method | The PDF's own text and labelled-field rules | The PDF or photo goes to the AI model, which answers through a fixed JSON schema |
+| Works on | Typed PDFs | Typed PDFs, scans and phone photos |
+
+It then checks the result against what's expected: name matches the supplier, right kind of document, not expired, dates in order. The verify form is pre-filled, and a document that fails a check opens on *Send it back*. **A person still verifies every document:** the AI suggests, procurement decides.
+
+**Ask BlinkHub.** Staff ask questions in plain English ("Which SMMEs in Limpopo have been waiting longest to be paid?") and get a table they can download as CSV, with the SQL shown. Without a key, 11 saved questions work. Three layers keep it safe:
+
+1. **The API:** staff only; every question and its SQL go to the audit log.
+2. **The SQL check** (`sqlglot`): exactly one `SELECT`, only the `ask` views, no session or server functions, at most 200 rows.
+3. **The database:** generated SQL runs on a **separate read-only login** (`blinkhub_ask`) that can only read curated views. These leave out bank details, password hashes and contact details, and every session is read-only with a 5-second timeout. Tests prove the login itself refuses what might slip past the checks: other tables, switching to the app's user, writes, long queries.
+
 ### Procurement Intelligence (Problem 3, Path B)
 
 **Analysis notebook:** [`analysis/01_procurement_analysis.ipynb`](analysis/01_procurement_analysis.ipynb). It starts from the case-study tables *exactly as printed* ("R85,000", "KZN"), then:
@@ -296,6 +315,7 @@ React + TypeScript (Vite), Tailwind CSS, TanStack Query, React Router and Rechar
 | Purchase orders | staff | Delivered vs invoiced per order; record a delivery (re-matches waiting invoices) |
 | Risk monitoring | auditor, manager… | Queue by pattern, evidence, case notes, assign, confirm/dismiss (note required); **accuracy tab** with recall and precision |
 | Supplier performance | staff | A–E scorecards with 5 KPIs; register a supplier with a duplicate-name warning |
+| Ask BlinkHub | staff | Questions in plain English → table + SQL + CSV |
 | Supplier compliance | staff | Expired, missing and expiring documents; check uploads; run the daily check |
 | Supplier portal | supplier | My invoices with status and owner, submit an invoice, my documents, my scorecard |
 | Notifications | everyone | Day-20 reminders and day-25 escalations |
@@ -320,6 +340,9 @@ backend/
   tests/          pytest suite (real PostgreSQL)
 analytics/        dbt project (staging -> marts) + Dagster orchestration
 analysis/         Path B notebook, raw case-study CSVs, synthetic snapshot
+infra/terraform/  AWS: EC2 + Elastic IP, private S3 bucket, IAM roles, SSM, budget alert, GitHub OIDC
+deploy/           Production compose override, Caddy (HTTPS), bootstrap and update scripts
+demo-documents/   Fictional certificates (watermarked) for testing uploads
 frontend/         React + TypeScript web app (Vite, Tailwind, TanStack Query), nginx Dockerfile
 powerbi/          Power BI connection file, theme, DAX measures, report (.pbix), screenshots
 docs/             Architecture, ERD, design viewer
@@ -333,7 +356,7 @@ docs/             Architecture, ERD, design viewer
 3. ~~Risk engine: 8 explainable rules + Isolation Forest; investigation queue; precision/recall on labelled synthetic data; supplier scorecards~~
 4. ~~Spend intelligence: dbt star schema + tests, Dagster, Power BI report, analysis notebook (Path B)~~
 5. ~~React + TypeScript frontend: internal console and supplier portal~~
-6. AWS deployment; Ask BlinkHub (LLM); certificate document AI
+6. ~~AWS deployment kit (Terraform, HTTPS, S3, budget alert, OIDC deploy); Ask BlinkHub; certificate reading~~ (see [docs/aws-deployment.md](docs/aws-deployment.md))
 
 ## Assumptions and limitations
 

@@ -1,0 +1,46 @@
+name: Deploy to AWS
+
+# Manual button (Actions -> Deploy to AWS -> Run workflow). Uses GitHub's OIDC token to
+# assume a narrowly-scoped AWS role, so no AWS keys are stored in GitHub. The role can only
+# run commands on the BlinkHub server (see infra/terraform, variable github_repo).
+#
+# Repository variables to set (Settings -> Secrets and variables -> Actions -> Variables):
+#   AWS_DEPLOY_ROLE_ARN   terraform output github_deploy_role_arn
+#   AWS_INSTANCE_ID       terraform output instance_id
+#   AWS_REGION            e.g. af-south-1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Pull and rebuild on the server
+        run: |
+          id=$(aws ssm send-command \
+            --instance-ids "${{ vars.AWS_INSTANCE_ID }}" \
+            --document-name AWS-RunShellScript \
+            --comment "BlinkHub deploy ${GITHUB_SHA::7}" \
+            --parameters 'commands=["sudo /opt/blinkhub/deploy/update.sh"],executionTimeout=["1800"]' \
+            --query Command.CommandId --output text)
+          echo "SSM command $id"
+          for i in $(seq 1 90); do
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "${{ vars.AWS_INSTANCE_ID }}" --query Status --output text 2>/dev/null || echo Pending)
+            echo "status: $status"
+            case "$status" in Success) break ;; Failed|Cancelled|TimedOut) exit 1 ;; esac
+            sleep 20
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "${{ vars.AWS_INSTANCE_ID }}" \
+            --query StandardOutputContent --output text | tail -30
+          [ "$status" = Success ]

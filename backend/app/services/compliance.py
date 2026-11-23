@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import Conflict, Forbidden, NotFound
 from app.models import Document, Supplier, User
-from app.services import audit
+from app.services import audit, extraction, storage
 from app.services.notifications import notify, supplier_users, users_with_role
 from app.services.workflow import Unprocessable
 
@@ -184,6 +184,7 @@ def _doc_out(d: Document) -> dict:
         "uploaded_at": d.uploaded_at,
         "verified_at": d.verified_at,
         "rejection_reason": d.rejection_reason,
+        "extracted": d.extracted_data,
         "has_file": not d.storage_key.startswith(("demo/", "synthetic/")),
     }
 
@@ -239,6 +240,13 @@ def upload(
         raise Unprocessable(f"Files can be at most {settings.document_max_mb} MB")
     content_type, ext = _sniff(content)
     sha = hashlib.sha256(content).hexdigest()
+    if db.scalar(select(Document.id).where(Document.supplier_id == supplier_id, Document.sha256 == sha)):
+        raise Conflict("This exact file has already been uploaded for this supplier")
+    supplier = db.get(Supplier, supplier_id)
+    # Read the facts off the document (AI if configured, else PDF text rules). Suggestions only:
+    # procurement still verifies, with the form pre-filled from what was read.
+    read = extraction.extract(content, content_type, supplier.legal_name, doc_type)
+    read_expiry = read["fields"].get("expiry_date")
 
     doc_id = uuid.uuid4()
     key = f"{supplier_id}/{doc_id}{ext}"
@@ -248,8 +256,11 @@ def upload(
         doc_type=doc_type,
         storage_key=key,
         sha256=sha,
-        status="UPLOADED",
-        expiry_date=expiry_date,  # as stated by the uploader; confirmed at verification
+        status="EXTRACTED" if read["method"] != "NONE" else "UPLOADED",
+        # as stated by the uploader, else as read from the document; confirmed at verification
+        expiry_date=expiry_date or (date.fromisoformat(read_expiry) if read_expiry else None),
+        extracted_data=read,
+        extraction_confidence=read["confidence"] if read["method"] != "NONE" else None,
         uploaded_by=user.id,
         original_filename=Path(filename or "document").name[:200],
         content_type=content_type,
@@ -262,12 +273,11 @@ def upload(
     except IntegrityError as e:
         raise Conflict("This exact file has already been uploaded for this supplier") from e
 
-    path = Path(settings.document_dir) / key
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
+    storage.put(key, content, content_type)
 
-    audit.record(db, user.id, "DOCUMENT_UPLOADED", "DOCUMENT", doc.id, None, _snap(doc))
-    supplier = db.get(Supplier, supplier_id)
+    audit.record(
+        db, user.id, "DOCUMENT_UPLOADED", "DOCUMENT", doc.id, None, {**_snap(doc), "read_by": read["method"]}
+    )
     notify(
         db,
         users_with_role(db, "PROCUREMENT_OFFICER"),
@@ -348,15 +358,15 @@ def reject(db: Session, user: User, doc_id: UUID, reason: str) -> dict:
     return _doc_out(doc)
 
 
-def document_file(db: Session, user: User, doc_id: UUID) -> tuple[Path, Document]:
+def document_file(db: Session, user: User, doc_id: UUID) -> tuple[bytes, Document]:
     doc = db.get(Document, doc_id)
     if not doc:
         raise NotFound("Document not found")
     _check_access(user, doc.supplier_id)
-    path = Path(get_settings().document_dir) / doc.storage_key
-    if not path.is_file():
+    content = None if doc.storage_key.startswith(("demo/", "synthetic/")) else storage.get(doc.storage_key)
+    if content is None:
         raise NotFound("No file is stored for this document (demonstration record)")
-    return path, doc
+    return content, doc
 
 
 def run_compliance_check(db: Session) -> dict[str, int]:

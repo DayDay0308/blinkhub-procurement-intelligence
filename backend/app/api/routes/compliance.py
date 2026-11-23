@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -82,8 +82,13 @@ def reject_document(
 
 @router.get("/compliance/documents/{doc_id}/file")
 def download_document(doc_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    path, doc = compliance.document_file(db, user, doc_id)
-    return FileResponse(path, media_type=doc.content_type, filename=doc.original_filename)
+    content, doc = compliance.document_file(db, user, doc_id)
+    name = (doc.original_filename or "document").replace('"', "")
+    return Response(
+        content,
+        media_type=doc.content_type,
+        headers={"Content-Disposition": f'inline; filename="{name}"', "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.post("/jobs/compliance-check")

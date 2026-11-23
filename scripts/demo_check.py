@@ -316,6 +316,19 @@ def run_checks(api: Api, use_docker: bool) -> None:
                 f"{sum(first.values())} reminders sent, none repeated")
     _()
 
+    @step("Ask BlinkHub answers on the read-only login; suppliers can't use it")
+    def _():
+        status, body = api.call("POST", "/api/v1/ask", who=MANAGER,
+                                body={"question": "Which invoices are past 30-day payment terms?"})
+        assert status == 200 and body["answered"], f"{status} {body}"
+        case = [r for r in body["rows"] if r[-1] == "CASE_STUDY"]
+        assert len(case) == 5, f"expected 5 overdue case-study invoices, got {len(case)}"
+        status, _ = api.call("POST", "/api/v1/ask", who="accounts@ubuntucleaning.demo", body={"question": "top suppliers"})
+        assert status == 403, f"supplier got {status}"
+        _, meta = api.call("GET", "/api/v1/ask/suggestions", who=MANAGER)
+        return f"{len(body['rows'])} overdue invoices ({body['method'].lower()}); AI model {'on' if meta['ai_enabled'] else 'off (saved questions)'}"
+    _()
+
     @step("Scorecards computed; a supplier can view its own")
     def _():
         _, body = api.call("GET", "/api/v1/scorecards", who=MANAGER, params={"limit": 500})

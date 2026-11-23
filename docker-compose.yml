@@ -50,6 +50,11 @@ services:
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-local-dev-data-key-change-me}
       SLA_CHECK_MINUTES: ${SLA_CHECK_MINUTES:-15}
       DOCUMENT_DIR: /data/documents
+      DOCUMENT_BUCKET: ${DOCUMENT_BUCKET:-}          # set on AWS: documents go to S3
+      AWS_DEFAULT_REGION: ${AWS_REGION:-af-south-1}
+      ASK_DB_PASSWORD: ${ASK_DB_PASSWORD:-ask-local-dev-password}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}      # optional: AI certificate reading + Ask BlinkHub
+      AI_MODEL: ${AI_MODEL:-claude-haiku-5-5}
     volumes:
       - documents:/data/documents   # uploaded supplier documents (S3 on AWS)
     ports:

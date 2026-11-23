@@ -17,3 +17,6 @@ Thumbs.db
 .idea/
 # Power BI temp
 *.pbix.bak
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*

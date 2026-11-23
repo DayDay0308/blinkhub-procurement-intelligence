@@ -1,0 +1,52 @@
+# Production overrides, used on the AWS server:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+#
+# Differences from local:
+#   * only Caddy is reachable from outside (ports 80/443, automatic HTTPS certificates);
+#     the database, API and web containers have no public ports
+#   * secrets come from /opt/blinkhub/.env, generated on the server (never committed)
+#   * documents go to S3 (DOCUMENT_BUCKET), not a local volume
+#   * Dagster/dbt (for Power BI) is optional: `--profile analytics`
+#   * logs are capped so a small disk can't fill up
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    ports: !reset []
+    logging: *logging
+  redis:
+    logging: *logging
+  api:
+    ports: !reset []
+    logging: *logging
+  worker:
+    logging: *logging
+  web:
+    ports: !reset []
+    logging: *logging
+  dagster:
+    profiles: ["analytics"]
+    ports: !reset []
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [web, api]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

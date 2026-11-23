@@ -1,0 +1,23 @@
+# Caddy gets and renews a Let's Encrypt certificate for {$DOMAIN} automatically.
+{$DOMAIN} {
+	encode gzip
+
+	# Interactive API docs for reviewers (the API itself is reached through /api)
+	handle /docs* {
+		reverse_proxy api:8000
+	}
+	handle /openapi.json {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

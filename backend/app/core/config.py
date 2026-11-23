@@ -32,12 +32,28 @@ class Settings(BaseSettings):
     # Supplier compliance documents
     document_dir: str = "/tmp/blinkhub-documents"  # Docker: a named volume; AWS: S3 (Phase 6)
     document_max_mb: int = 5
+    document_bucket: str = ""  # set on AWS: files go to this S3 bucket instead of document_dir
     compliance_warning_days: int = 30  # "expiring soon" window for certificates
+    # AI features. Without a key, certificate reading uses PDF text rules and Ask BlinkHub
+    # uses fixed question templates. With a key, both use the model below.
+    anthropic_api_key: str = ""
+    ai_model: str = "claude-haiku-5-5"
+    ai_timeout_seconds: float = 30.0
+    # Ask BlinkHub runs generated SQL on this separate, read-only database login
+    ask_db_password: str = "ask-local-dev-password"
+    ask_max_rows: int = 200
 
     @model_validator(mode="after")
     def no_default_secret_outside_local(self):
-        if self.environment not in ("local", "test") and self.jwt_secret.startswith("local-dev"):
-            raise ValueError("Set a real JWT_SECRET outside local/test environments.")
+        if self.environment not in ("local", "test"):
+            defaults = {
+                "JWT_SECRET": self.jwt_secret.startswith("local-dev"),
+                "DATA_ENCRYPTION_KEY": self.data_encryption_key.startswith("local-dev"),
+                "ASK_DB_PASSWORD": self.ask_db_password.startswith("ask-local-dev"),
+            }
+            if any(defaults.values()):
+                names = ", ".join(k for k, v in defaults.items() if v)
+                raise ValueError(f"Set real values for {names} outside local/test environments.")
         return self
 
 
