@@ -6,6 +6,7 @@
 import logging
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -44,22 +45,19 @@ class Forbidden(AppError):
 
 
 def _body(code: str, message: str, details: object | None = None) -> dict:
-    return {"error": {"code": code, "message": message, "details": details}}
+    return {"error": {"code": code, "message": message, "details": jsonable_encoder(details)}}
 
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error(_: Request, exc: AppError):
         headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, Unauthorized) else None
-        return JSONResponse(
-            _body(exc.code, exc.message, exc.details), exc.status_code, headers=headers
-        )
+        return JSONResponse(_body(exc.code, exc.message, exc.details), exc.status_code, headers=headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError):
         details = [
-            {"field": ".".join(str(p) for p in e["loc"][1:]), "message": e["msg"]}
-            for e in exc.errors()
+            {"field": ".".join(str(p) for p in e["loc"][1:]), "message": e["msg"]} for e in exc.errors()
         ]
         return JSONResponse(
             _body("VALIDATION_ERROR", "Some fields are invalid.", details),

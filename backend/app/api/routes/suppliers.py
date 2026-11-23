@@ -41,9 +41,7 @@ def list_suppliers(
 
 
 @router.get("/{supplier_id}", response_model=SupplierOut)
-def get_supplier(
-    supplier_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)
-):
+def get_supplier(supplier_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Suppliers may only see their own profile.
     if user.role == "SUPPLIER" and user.supplier_id != supplier_id:
         raise Forbidden("Suppliers can only view their own profile.")

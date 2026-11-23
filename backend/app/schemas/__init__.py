@@ -100,6 +100,12 @@ class SupplierRef(ORM):
     supplier_type: str
 
 
+class UserRef(ORM):
+    id: UUID
+    full_name: str
+    role: str
+
+
 class InvoiceOut(BaseModel):
     id: UUID
     invoice_number: str
@@ -115,6 +121,88 @@ class InvoiceOut(BaseModel):
     ageing_bucket: Literal["0-30", "31-60", "61-90", "90+"]
     sla_state: SlaState
     exceptions: list[str]
+    current_owner: UserRef | None = None
+
+
+class InvoiceSubmit(BaseModel):
+    invoice_number: Annotated[Str, StringConstraints(min_length=1, max_length=40)]
+    po_number: Annotated[Str, StringConstraints(max_length=20)] | None = None
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    vat_amount: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=2)
+    invoice_date: date
+    supplier_id: UUID | None = Field(
+        default=None, description="Required when staff capture an invoice; ignored for suppliers."
+    )
+
+    @model_validator(mode="after")
+    def vat_not_more_than_total(self):
+        if self.vat_amount > self.amount:
+            raise ValueError("vat_amount cannot exceed amount")
+        return self
+
+
+class LinkPo(BaseModel):
+    po_number: Annotated[Str, StringConstraints(min_length=1, max_length=20)]
+
+
+class Decision(BaseModel):
+    comment: Annotated[Str, StringConstraints(max_length=1000)] | None = None
+
+
+class Rejection(BaseModel):
+    reason: Annotated[Str, StringConstraints(min_length=5, max_length=1000)]
+
+
+class PaymentOut(ORM):
+    id: UUID
+    invoice_id: UUID
+    amount: Decimal
+    paid_at: datetime
+    reference: str
+
+
+class TimelineEvent(BaseModel):
+    at: datetime
+    action: str
+    by_role: str | None
+    status: str | None
+    note: str | None
+
+
+class GoodsReceiptIn(BaseModel):
+    amount_received: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    received_date: date
+
+
+class GoodsReceiptOut(ORM):
+    id: UUID
+    grn_number: str
+    po_id: UUID
+    received_date: date
+    amount_received: Decimal
+
+
+class PurchaseOrderOut(BaseModel):
+    id: UUID
+    po_number: str
+    supplier: SupplierRef
+    department: str
+    category: str
+    total_amount: Decimal
+    status: str
+    received_amount: Decimal
+    invoiced_amount: Decimal
+
+
+class NotificationOut(ORM):
+    id: UUID
+    kind: str
+    entity_type: str
+    entity_id: UUID
+    title: str
+    body: str | None
+    created_at: datetime
+    read_at: datetime | None
 
 
 class Page[T](BaseModel):

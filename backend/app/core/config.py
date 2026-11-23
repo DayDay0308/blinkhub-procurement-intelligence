@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     payment_terms_days: int = 30
     sla_warning_days: int = 20
     sla_escalation_days: int = 25
+    match_tolerance_pct: float = 2.0  # 3-way match tolerance
+    bank_change_cooldown_hours: int = 72  # who changed bank details can't pay within this window
+
+    redis_url: str = "redis://localhost:6379/0"
+    sla_check_minutes: int = 15
+    data_encryption_key: str = "local-dev-data-key-change-me"
 
     @model_validator(mode="after")
     def no_default_secret_outside_local(self):

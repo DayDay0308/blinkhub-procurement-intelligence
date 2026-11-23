@@ -9,8 +9,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Computed, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy import Computed, ForeignKey, LargeBinary, String, Text, func
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -56,9 +56,7 @@ Province = pg_enum("province", "core", *PROVINCES)
 UserRole = pg_enum("user_role", "core", *ROLES)
 SupplierType = pg_enum("supplier_type", "core", "SMME", "LARGE_ENTERPRISE")
 EnterpriseSize = pg_enum("enterprise_size", "core", "EME", "QSE", "GENERIC")
-SupplierStatus = pg_enum(
-    "supplier_status", "core", "PENDING", "ACTIVE", "SUSPENDED", "INACTIVE", "BLOCKED"
-)
+SupplierStatus = pg_enum("supplier_status", "core", "PENDING", "ACTIVE", "SUSPENDED", "INACTIVE", "BLOCKED")
 PoStatus = pg_enum(
     "po_status",
     "p2p",
@@ -71,6 +69,7 @@ PoStatus = pg_enum(
     "CANCELLED",
 )
 InvoiceStatus = pg_enum("invoice_status", "p2p", *INVOICE_STATUSES)
+ApprovalDecision = pg_enum("approval_decision", "p2p", "PENDING", "APPROVED", "REJECTED", "ESCALATED")
 
 
 class Department(Base):
@@ -172,6 +171,74 @@ class Invoice(Base):
     current_approver_id: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
     document_key: Mapped[str | None]
     paid_at: Mapped[datetime | None]
+    match_exceptions: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
 
     supplier: Mapped[Supplier] = relationship(lazy="joined")
     purchase_order: Mapped[PurchaseOrder | None] = relationship(lazy="joined")
+    current_approver: Mapped[User | None] = relationship(lazy="joined")
+
+
+class GoodsReceipt(Base):
+    __tablename__ = "goods_receipts"
+    __table_args__ = {"schema": "p2p"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    grn_number: Mapped[str] = mapped_column(String(20), unique=True)
+    po_id: Mapped[UUID] = mapped_column(ForeignKey("p2p.purchase_orders.id"))
+    received_date: Mapped[date]
+    amount_received: Mapped[Decimal]
+    received_by: Mapped[UUID] = mapped_column(ForeignKey("core.users.id"))
+    evidence_key: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class InvoiceApproval(Base):
+    __tablename__ = "invoice_approvals"
+    __table_args__ = {"schema": "p2p"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    invoice_id: Mapped[UUID] = mapped_column(ForeignKey("p2p.invoices.id"))
+    step: Mapped[int]
+    approver_id: Mapped[UUID] = mapped_column(ForeignKey("core.users.id"))
+    decision: Mapped[str] = mapped_column(ApprovalDecision, server_default="PENDING")
+    comment: Mapped[str | None]
+    assigned_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    decided_at: Mapped[datetime | None]
+
+
+class BankAccount(Base):
+    __tablename__ = "bank_accounts"
+    __table_args__ = {"schema": "compliance"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("core.suppliers.id"))
+    bank_name: Mapped[str] = mapped_column(String(80))
+    account_number_enc: Mapped[bytes] = mapped_column(LargeBinary)
+    account_last4: Mapped[str] = mapped_column(String(4))
+    branch_code: Mapped[str] = mapped_column(String(10))
+    verified: Mapped[bool] = mapped_column(server_default="false")
+    effective_from: Mapped[datetime] = mapped_column(server_default=func.now())
+    effective_to: Mapped[datetime | None]
+    changed_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    __table_args__ = {"schema": "p2p"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    invoice_id: Mapped[UUID] = mapped_column(ForeignKey("p2p.invoices.id"))
+    bank_account_id: Mapped[UUID] = mapped_column(ForeignKey("compliance.bank_accounts.id"))
+    amount: Mapped[Decimal]
+    paid_at: Mapped[datetime]
+    reference: Mapped[str] = mapped_column(String(40), unique=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = {"schema": "core"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("core.users.id"))
+    kind: Mapped[str] = mapped_column(String(40))
+    entity_type: Mapped[str] = mapped_column(String(30))
+    entity_id: Mapped[UUID]
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    read_at: Mapped[datetime | None]

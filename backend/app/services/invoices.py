@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from app.core.config import get_settings
 from app.models import Invoice
-from app.schemas import InvoiceOut, SupplierRef
+from app.schemas import InvoiceOut, SupplierRef, UserRef
 
 FINAL_STATUSES = {"PAID", "REJECTED"}
 
@@ -44,15 +44,17 @@ def sla_state(inv: Invoice, days: int) -> str:
 
 
 def exceptions(inv: Invoice) -> list[str]:
-    """Reasons this invoice cannot flow straight through to payment."""
-    out = []
-    if inv.po_id is None:
-        out.append("MISSING_PO_REFERENCE")
-    elif inv.purchase_order and inv.amount > inv.purchase_order.total_amount:
-        out.append("AMOUNT_EXCEEDS_PO")
-    if inv.status not in FINAL_STATUSES and inv.current_approver_id is None:
-        out.append("NO_ACCOUNTABLE_APPROVER")
-    return out
+    """Reasons this invoice cannot flow straight through to payment: the stored 3-way-match
+    result, plus gaps visible in records that never went through matching (as-found data)."""
+    out = set(inv.match_exceptions or [])
+    if inv.status not in FINAL_STATUSES:
+        if inv.po_id is None:
+            out.add("MISSING_PO_REFERENCE")
+        elif inv.purchase_order and inv.amount > inv.purchase_order.total_amount:
+            out.add("AMOUNT_EXCEEDS_PO")
+        if inv.current_approver_id is None:
+            out.add("NO_ACCOUNTABLE_APPROVER")
+    return sorted(out)
 
 
 def to_out(inv: Invoice, now: datetime | None = None) -> InvoiceOut:
@@ -72,4 +74,5 @@ def to_out(inv: Invoice, now: datetime | None = None) -> InvoiceOut:
         ageing_bucket=ageing_bucket(days),
         sla_state=sla_state(inv, days),
         exceptions=exceptions(inv),
+        current_owner=(UserRef.model_validate(inv.current_approver) if inv.current_approver else None),
     )

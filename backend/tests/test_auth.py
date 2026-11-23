@@ -12,19 +12,13 @@ def test_login_and_me(client, token):
 
 
 def test_login_is_case_insensitive_on_email(client):
-    r = client.post(
-        "/api/v1/auth/login", data={"username": "Finance@MICS.demo", "password": PASSWORD}
-    )
+    r = client.post("/api/v1/auth/login", data={"username": "Finance@MICS.demo", "password": PASSWORD})
     assert r.status_code == 200
 
 
 def test_wrong_password_and_unknown_email_look_identical(client):
-    wrong = client.post(
-        "/api/v1/auth/login", data={"username": "finance@mics.demo", "password": "nope"}
-    )
-    unknown = client.post(
-        "/api/v1/auth/login", data={"username": "ghost@mics.demo", "password": "nope"}
-    )
+    wrong = client.post("/api/v1/auth/login", data={"username": "finance@mics.demo", "password": "nope"})
+    unknown = client.post("/api/v1/auth/login", data={"username": "ghost@mics.demo", "password": "nope"})
     assert wrong.status_code == unknown.status_code == 401
     assert wrong.json() == unknown.json()
 

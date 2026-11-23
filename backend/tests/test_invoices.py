@@ -56,9 +56,7 @@ def test_as_found_data_shows_process_gaps(client, token):
 
 
 def test_supplier_sees_only_own_invoices(client, token):
-    items = client.get("/api/v1/invoices", headers=token("accounts@ubuntucleaning.demo")).json()[
-        "items"
-    ]
+    items = client.get("/api/v1/invoices", headers=token("accounts@ubuntucleaning.demo")).json()["items"]
     assert {i["invoice_number"] for i in items} == {"INV001", "INV006"}
     assert {i["supplier"]["legal_name"] for i in items} == {"Ubuntu Cleaning"}
 

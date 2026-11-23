@@ -12,6 +12,7 @@ from decimal import Decimal
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import Category, Department, Invoice, PurchaseOrder, Supplier, User
@@ -101,6 +102,27 @@ def load(db: Session, now: datetime | None = None) -> dict[str, int]:
             )
         )
     db.flush()
+
+    # Verified bank accounts (demo numbers), encrypted at rest with pgcrypto.
+    banks = ["FNB", "Standard Bank", "Absa", "Nedbank", "Capitec"]
+    for i, s in enumerate(suppliers.values()):
+        number = f"62{i + 1:03d}{448810 + i * 7:06d}"
+        db.execute(
+            text(
+                "INSERT INTO compliance.bank_accounts "
+                "(supplier_id, bank_name, account_number_enc, account_last4, branch_code, verified, "
+                " effective_from) "
+                "VALUES (:sid, :bank, pgp_sym_encrypt(:num, :key), right(:num, 4), '250655', true, "
+                "        :since)"
+            ),
+            {
+                "sid": s.id,
+                "bank": banks[i % len(banks)],
+                "num": number,
+                "key": get_settings().data_encryption_key,
+                "since": now - timedelta(days=365),
+            },
+        )
     return {
         "suppliers": len(suppliers),
         "purchase_orders": len(cs.PURCHASE_ORDERS),

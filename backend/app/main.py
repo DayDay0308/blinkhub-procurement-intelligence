@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, invoices, suppliers
+from app.api.routes import auth, health, invoices, notifications, purchase_orders, suppliers
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 
@@ -55,6 +55,8 @@ def create_app() -> FastAPI:
     api.include_router(auth.router)
     api.include_router(suppliers.router)
     api.include_router(invoices.router)
+    api.include_router(purchase_orders.router)
+    api.include_router(notifications.router)
     app.include_router(health.router)
     app.include_router(api)
     return app

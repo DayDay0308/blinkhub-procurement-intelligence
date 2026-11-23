@@ -1,8 +1,7 @@
 # BlinkHub Procurement Intelligence — local stack
 #   docker compose up --build
 #   API docs: http://localhost:8000/docs
-# Services are added phase by phase (Redis/workers and MinIO arrive with the
-# invoice workflow and document features).
+# Services: db (PostgreSQL), redis (queue), api (FastAPI), worker (Celery + beat: SLA checks)
 
 name: blinkhub
 
@@ -23,20 +22,46 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: ./backend
     depends_on:
       db:
         condition: service_healthy
-    environment:
+      redis:
+        condition: service_healthy
+    environment: &app-env
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-blinkhub}:${POSTGRES_PASSWORD:-blinkhub}@db:5432/blinkhub
       ENVIRONMENT: ${ENVIRONMENT:-local}
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-0123456789}
       SEED_ON_START: ${SEED_ON_START:-true}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@2026!}
       CORS_ORIGINS: '["http://localhost:5173"]'
+      REDIS_URL: redis://redis:6379/0
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-local-dev-data-key-change-me}
+      SLA_CHECK_MINUTES: ${SLA_CHECK_MINUTES:-15}
     ports:
       - "8000:8000"
+    restart: unless-stopped
+
+  worker:
+    build: ./backend
+    # Runs scheduled jobs (payment-SLA check). Starts after the API has migrated the DB.
+    entrypoint: ["celery", "-A", "app.worker", "worker", "--beat", "--loglevel=info",
+                 "--schedule=/tmp/celerybeat-schedule"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      SEED_ON_START: "false"
     restart: unless-stopped
 
 volumes:

@@ -22,10 +22,7 @@ PASSWORD = "Demo@2026!"
 
 def _recreate_database(url: str) -> None:
     u = make_url(url)
-    admin = (
-        f"host={u.host} port={u.port or 5432} user={u.username} "
-        f"password={u.password} dbname=postgres"
-    )
+    admin = f"host={u.host} port={u.port or 5432} user={u.username} password={u.password} dbname=postgres"
     with psycopg.connect(admin, autocommit=True) as conn:
         conn.execute(f'DROP DATABASE IF EXISTS "{u.database}" WITH (FORCE)')
         conn.execute(f'CREATE DATABASE "{u.database}"')
