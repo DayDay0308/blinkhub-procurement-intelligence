@@ -59,10 +59,10 @@ compliance AS (
          tax.expiry AS tax_expiry, bee.expiry AS bbbee_expiry
   FROM sup s
   LEFT JOIN LATERAL (SELECT bool_or(status = 'VERIFIED' AND coalesce(expiry_date, 'infinity') >= current_date) AS ok,
-                            max(expiry_date) AS expiry
+                            max(expiry_date) FILTER (WHERE status IN ('VERIFIED', 'EXPIRED')) AS expiry
                      FROM compliance.documents WHERE supplier_id = s.id AND doc_type = 'TAX_CLEARANCE') tax ON true
   LEFT JOIN LATERAL (SELECT bool_or(status = 'VERIFIED' AND coalesce(expiry_date, 'infinity') >= current_date) AS ok,
-                            max(expiry_date) AS expiry
+                            max(expiry_date) FILTER (WHERE status IN ('VERIFIED', 'EXPIRED')) AS expiry
                      FROM compliance.documents WHERE supplier_id = s.id
                        AND doc_type IN ('BBBEE_CERTIFICATE', 'BBBEE_AFFIDAVIT')) bee ON true
 ),

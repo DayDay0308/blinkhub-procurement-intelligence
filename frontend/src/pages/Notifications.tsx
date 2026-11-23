@@ -4,21 +4,27 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "../components/Layout";
 import { Button, Empty, Loading, Panel } from "../components/ui";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { dateTime } from "../lib/format";
 import type { Notification, Page } from "../lib/types";
 
 export function Notifications() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const q = useQuery({ queryKey: ["notifications", "all"], queryFn: () => api<Page<Notification>>("/notifications") });
   const read = useMutation({
     mutationFn: (id: string) => api(`/notifications/${id}/read`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
-  const link = (n: Notification) => (n.entity_type === "INVOICE" ? `/invoices/${n.entity_id}` : n.entity_type === "RISK_FLAG" ? `/risk/flags/${n.entity_id}` : null);
+  const link = (n: Notification) =>
+    n.entity_type === "INVOICE" ? `/invoices/${n.entity_id}`
+    : n.entity_type === "RISK_FLAG" ? `/risk/flags/${n.entity_id}`
+    : n.kind.startsWith("DOC_") ? (user?.role === "SUPPLIER" ? "/my-documents" : "/compliance")
+    : null;
 
   return (
     <>
-      <PageHeader title="Notifications" intro="Payment-terms reminders and escalations, sent once per invoice per stage." />
+      <PageHeader title="Notifications" intro="Payment-terms reminders, escalations and document reminders. Each one is sent once." />
       <Panel>
         {q.isLoading ? <Loading /> : !q.data?.items.length ? <Empty title="You're all caught up">Reminders appear here when an invoice reaches day 20 or 25 of its terms.</Empty> : (
           <ul className="-my-4 divide-y divide-line-soft">

@@ -10,6 +10,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { InvoiceDetail } from "./pages/InvoiceDetail";
 import { Invoices } from "./pages/Invoices";
 import { Login } from "./pages/Login";
+import { Compliance, MyDocuments } from "./pages/Compliance";
 import { MyScorecard } from "./pages/MyScorecard";
 import { Notifications } from "./pages/Notifications";
 import { PurchaseOrders } from "./pages/PurchaseOrders";
@@ -48,6 +49,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="notifications" element={<Notifications />} />
               <Route path="submit" element={<SubmitInvoice />} />
               <Route path="my-scorecard" element={<MyScorecard />} />
+              <Route path="compliance" element={<Compliance />} />
+              <Route path="my-documents" element={<MyDocuments />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

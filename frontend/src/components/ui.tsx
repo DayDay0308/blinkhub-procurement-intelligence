@@ -131,15 +131,15 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-4 pt-[10vh]" onClick={onClose}>
-      <div role="dialog" aria-modal aria-label={title} className="w-full max-w-lg rounded-lg bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-4 pt-[8vh]" onClick={onClose}>
+      <div role="dialog" aria-modal aria-label={title} className={clsx("max-h-[85vh] w-full overflow-y-auto rounded-lg bg-surface shadow-xl", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-line-soft px-5 py-3">
           <h2 className="font-semibold">{title}</h2>
           <button aria-label="Close" onClick={onClose} className="rounded p-1 text-muted hover:bg-paper"><X className="size-4" /></button>

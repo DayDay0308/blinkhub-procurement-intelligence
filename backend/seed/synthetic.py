@@ -233,6 +233,10 @@ class Config:
     collusion: int = 8
     non_compliant: int = 15
     unusual_amounts: int = 15
+    # compliance documents (not risk anomalies; see _compliance_variety)
+    docs_expiring: int = 18
+    docs_missing: int = 12
+    docs_pending: int = 6
 
 
 @dataclass
@@ -789,6 +793,51 @@ def _plant(st: _State, cfg: Config) -> None:
         st.label("CONCENTRATION", "CATEGORY", st.cats[c], category=c)
 
 
+def _compliance_variety(st: _State, cfg: Config) -> None:
+    """Make document expiry realistic for the compliance check: some certificates about to
+    expire, some never received, some renewals waiting for verification.
+
+    Uses its own random generator, so the planted risk anomalies above are unchanged, and
+    avoids the suppliers planted as INCOMPLETE_COMPLIANCE (their tax clearance stays expired).
+    """
+    rng = np.random.default_rng(cfg.seed + 7)
+    today = st.now.date()
+    planted = {lab["entity_id"] for lab in st.labels if lab["anomaly_type"] == "INCOMPLETE_COMPLIANCE"}
+    pool = [s["id"] for s in st.suppliers if s["status"] == "ACTIVE" and s["id"] not in planted]
+    chosen = [
+        pool[int(i)]
+        for i in rng.choice(
+            len(pool), size=cfg.docs_expiring + cfg.docs_missing + cfg.docs_pending, replace=False
+        )
+    ]
+    expiring = chosen[: cfg.docs_expiring]
+    missing = set(chosen[cfg.docs_expiring : cfg.docs_expiring + cfg.docs_missing])
+    pending = chosen[cfg.docs_expiring + cfg.docs_missing :]
+
+    for sid in expiring:
+        d = next(d for d in st.docs if d["supplier_id"] == sid and d["doc_type"] == "TAX_CLEARANCE")
+        d["expiry_date"] = today + timedelta(days=int(rng.integers(3, 30)))
+        d["issue_date"] = d["expiry_date"] - timedelta(days=365)
+        d["status"] = "VERIFIED"
+    st.docs = [
+        d for d in st.docs if not (d["supplier_id"] in missing and d["doc_type"] == "BBBEE_CERTIFICATE")
+    ]
+    by_code = {s["id"]: s["supplier_code"] for s in st.suppliers}
+    for sid in pending:
+        st.docs.append(
+            {
+                "supplier_id": sid,
+                "doc_type": "TAX_CLEARANCE",
+                "storage_key": f"synthetic/{by_code[sid]}/tax_clearance_renewal.pdf",
+                "sha256": hashlib.sha256(f"{sid}TAX_CLEARANCE-renewal".encode()).hexdigest(),
+                "issue_date": None,
+                "expiry_date": today + timedelta(days=int(rng.integers(330, 400))),
+                "status": "UPLOADED",
+                "uploaded_at": st.now - timedelta(days=int(rng.integers(1, 6))),
+            }
+        )
+
+
 def _opportunities(st: _State, cfg: Config) -> None:
     rng, now = st.rng, st.now
     active = [s for s in st.suppliers if s["status"] == "ACTIVE"]
@@ -882,6 +931,7 @@ def generate(db: Session, cfg: Config | None = None, now: datetime | None = None
     _normal_business(st, cfg)
     _scale_to_target(st, cfg.target_spend)
     _plant(st, cfg)
+    _compliance_variety(st, cfg)
     _opportunities(st, cfg)
     _write(db, st)
     db.flush()

@@ -9,7 +9,8 @@ COPY . .
 
 # ---- runtime stage: small image, non-root user ----
 FROM python:3.12-slim AS runtime
-RUN useradd --create-home --uid 10001 app
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /data/documents && chown app:app /data/documents
 WORKDIR /app
 COPY --from=build --chown=app:app /app /app
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1

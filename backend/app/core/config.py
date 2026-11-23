@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     sla_check_minutes: int = 15
     data_encryption_key: str = "local-dev-data-key-change-me"
+    # Supplier compliance documents
+    document_dir: str = "/tmp/blinkhub-documents"  # Docker: a named volume; AWS: S3 (Phase 6)
+    document_max_mb: int = 5
+    compliance_warning_days: int = 30  # "expiring soon" window for certificates
 
     @model_validator(mode="after")
     def no_default_secret_outside_local(self):

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Bell, FileText, Gauge, LogOut, PackageCheck, PlusCircle, ShieldAlert, Star, Users } from "lucide-react";
+import { Bell, FileCheck2, FileText, Gauge, LogOut, PackageCheck, PlusCircle, ShieldAlert, Star, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -22,9 +22,11 @@ const NAV: NavItem[] = [
   { to: "/purchase-orders", label: "Purchase orders", icon: PackageCheck, roles: ["ADMIN", "PROCUREMENT_OFFICER", "FINANCE_OFFICER", "MANAGER", "AUDITOR"] },
   { to: "/risk", label: "Risk monitoring", icon: ShieldAlert, roles: ["ADMIN", "PROCUREMENT_OFFICER", "FINANCE_OFFICER", "MANAGER", "AUDITOR"] },
   { to: "/suppliers", label: "Supplier performance", icon: Users, roles: STAFF },
+  { to: "/compliance", label: "Supplier compliance", icon: FileCheck2, roles: STAFF },
   // supplier portal
   { to: "/", label: "My invoices", icon: FileText, roles: ["SUPPLIER"] },
   { to: "/submit", label: "Submit an invoice", icon: PlusCircle, roles: ["SUPPLIER"] },
+  { to: "/my-documents", label: "My documents", icon: FileCheck2, roles: ["SUPPLIER"] },
   { to: "/my-scorecard", label: "My scorecard", icon: Star, roles: ["SUPPLIER"] },
 ];
 

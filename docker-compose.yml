@@ -49,13 +49,16 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-local-dev-data-key-change-me}
       SLA_CHECK_MINUTES: ${SLA_CHECK_MINUTES:-15}
+      DOCUMENT_DIR: /data/documents
+    volumes:
+      - documents:/data/documents   # uploaded supplier documents (S3 on AWS)
     ports:
       - "8000:8000"
     restart: unless-stopped
 
   worker:
     build: ./backend
-    # Runs scheduled jobs (payment-SLA check). Starts after the API has migrated the DB.
+    # Runs scheduled jobs: payment-SLA check, 02:00 risk scan, 06:00 compliance check.
     entrypoint: ["celery", "-A", "app.worker", "worker", "--beat", "--loglevel=info",
                  "--schedule=/tmp/celerybeat-schedule"]
     depends_on:
@@ -95,3 +98,4 @@ services:
 
 volumes:
   pgdata:
+  documents:

@@ -241,3 +241,4 @@ erDiagram
 | 0003 | `p2p.purchase_orders.expected_delivery_date` | Delivery-reliability KPI |
 | 0003 | `risk.flags.last_seen_at`, `resolved_by`; seeded `risk.rules` with tunable `params` | Engine bookkeeping; thresholds changeable without a deploy |
 | 0003 | `synthetic.anomaly_labels` (separate schema) | Answer key for planted anomalies in the demo data, so precision and recall can be measured. Kept apart from operational data |
+| 0004 | `compliance.documents.uploaded_by`, `original_filename`, `content_type`, `size_bytes`, `rejection_reason`; unique (supplier, file hash) | Traceable uploads, reasons suppliers can act on, no duplicate files |

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     analytics,
     auth,
+    compliance,
     health,
     invoices,
     notifications,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     api.include_router(risk.router)
     api.include_router(scorecards.router)
     api.include_router(analytics.router)
+    api.include_router(compliance.router)
     app.include_router(health.router)
     app.include_router(api)
     return app

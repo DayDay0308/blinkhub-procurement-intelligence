@@ -301,6 +301,11 @@ class Document(Base):
     verified_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
     verified_at: Mapped[datetime | None]
     uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    uploaded_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
+    original_filename: Mapped[str | None] = mapped_column(String(200))
+    content_type: Mapped[str | None] = mapped_column(String(100))
+    size_bytes: Mapped[int | None]
+    rejection_reason: Mapped[str | None]
 
 
 class Opportunity(Base):

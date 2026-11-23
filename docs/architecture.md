@@ -127,7 +127,7 @@ Implemented in `backend/app/services/risk/`. Each rule is a single SQL query, wi
 | Measure | Result |
 |---|---|
 | Overall recall | **99.2%** (123 of 124 planted anomalies caught) |
-| Overall precision | **89.8%** (93.4% counting real problems caught by another rule) |
+| Overall precision | **about 89–90%** (92–93% counting real problems caught by another rule); moves slightly with the run date |
 | SQL rules | 95–100% precision per rule |
 | ML | 58% precision: a second opinion |
 

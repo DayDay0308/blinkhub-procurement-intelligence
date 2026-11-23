@@ -13,6 +13,7 @@ from celery.schedules import crontab
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.services.compliance import run_compliance_check
 from app.services.risk import run_risk_engine
 from app.services.sla import run_sla_check
 
@@ -30,6 +31,10 @@ celery_app.conf.update(
         "nightly-risk-scan": {
             "task": "app.worker.risk_scan",
             "schedule": crontab(hour=2, minute=0),  # 02:00 Johannesburg time
+        },
+        "daily-compliance-check": {
+            "task": "app.worker.compliance_check",
+            "schedule": crontab(hour=6, minute=0),  # before the working day starts
         },
     },
 )
@@ -49,4 +54,12 @@ def risk_scan() -> dict:
     with SessionLocal() as db, db.begin():
         result = run_risk_engine(db)
     log.info("risk_scan %s", result)
+    return result
+
+
+@celery_app.task(name="app.worker.compliance_check")
+def compliance_check() -> dict[str, int]:
+    with SessionLocal() as db, db.begin():
+        result = run_compliance_check(db)
+    log.info("compliance_check %s", result)
     return result

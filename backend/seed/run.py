@@ -124,21 +124,47 @@ def load(db: Session, now: datetime | None = None) -> dict[str, int]:
                 "since": now - timedelta(days=365),
             },
         )
-    # Valid compliance documents for the case-study suppliers (demo values; the case study
-    # does not describe their documents).
+    # Compliance documents for the case-study suppliers. The case study doesn't describe
+    # them, so these are demo values (see ASSUMPTIONS): most are valid, and three suppliers
+    # show the situations the compliance check is built for.
+    today = now.date()
+    special = {  # legal_name -> {doc_type: (status, expiry offset in days) or None for missing}
+        "Thuto Supplies": {"TAX_CLEARANCE": ("VERIFIED", 12), "BBBEE_CERTIFICATE": ("EXPIRED", -15)},
+        "Khula Electrical": {"TAX_CLEARANCE": ("VERIFIED", 20)},
+        "Rapid Transport": {"BBBEE_CERTIFICATE": None},
+    }
     for s in suppliers.values():
         for doc_type in ("TAX_CLEARANCE", "BBBEE_CERTIFICATE"):
+            spec = special.get(s.legal_name, {}).get(doc_type, ("VERIFIED", 300))
+            if spec is None:
+                continue  # missing: never received
+            status, days = spec
             db.add(
                 Document(
                     supplier_id=s.id,
                     doc_type=doc_type,
-                    status="VERIFIED",
+                    status=status,
                     storage_key=f"demo/{s.supplier_code}/{doc_type.lower()}.pdf",
                     sha256=hashlib.sha256(f"{s.id}{doc_type}".encode()).hexdigest(),
-                    issue_date=(now - timedelta(days=60)).date(),
-                    expiry_date=(now + timedelta(days=300)).date(),
+                    issue_date=today + timedelta(days=days - 365),
+                    expiry_date=today + timedelta(days=days),
+                    uploaded_at=now + timedelta(days=days - 365),
                 )
             )
+    # Khula has already sent its renewed tax clearance; it is waiting for procurement to verify.
+    khula = next(s for s in suppliers.values() if s.legal_name == "Khula Electrical")
+    db.add(
+        Document(
+            supplier_id=khula.id,
+            doc_type="TAX_CLEARANCE",
+            status="UPLOADED",
+            storage_key=f"demo/{khula.supplier_code}/tax_clearance_renewal.pdf",
+            sha256=hashlib.sha256(f"{khula.id}TAX_CLEARANCE-renewal".encode()).hexdigest(),
+            expiry_date=today + timedelta(days=385),
+            original_filename="Khula_SARS_TCS_2027.pdf",
+            uploaded_at=now - timedelta(days=2),
+        )
+    )
     db.flush()
     return {
         "suppliers": len(suppliers),

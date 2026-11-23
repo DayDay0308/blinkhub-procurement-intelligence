@@ -114,3 +114,53 @@ export interface Overview {
   top_suppliers: { supplier_id: string; supplier: string; is_smme: boolean; bbbee_level: number | null; spend: string; share: number }[];
   risk: { open_flags: number; critical_high: number; value_under_review: string };
 }
+
+export type ComplianceState = "EXPIRED" | "MISSING" | "PENDING_VERIFICATION" | "EXPIRING" | "VALID";
+
+export interface Requirement {
+  requirement: "TAX_CLEARANCE" | "BBBEE";
+  label: string;
+  state: ComplianceState;
+  expiry_date: string | null;
+  days_left: number | null;
+  document_id: string | null;
+  pending_document_id: string | null;
+}
+
+export interface ComplianceItem {
+  supplier: { id: string; supplier_code: string; legal_name: string; supplier_type: string; status: string };
+  state: ComplianceState;
+  requirements: Requirement[];
+  next_expiry: string | null;
+  paid_last_90_days: string | number;
+}
+
+export interface ComplianceOverview {
+  warning_days: number;
+  suppliers: number;
+  by_state: Record<ComplianceState, number>;
+  awaiting_verification: number;
+  paid_to_non_compliant_90_days: string | number;
+  items: ComplianceItem[];
+}
+
+export interface SupplierDocument {
+  id: string;
+  doc_type: string;
+  status: "UPLOADED" | "EXTRACTED" | "VERIFIED" | "REJECTED" | "EXPIRED";
+  issue_date: string | null;
+  expiry_date: string | null;
+  original_filename: string | null;
+  size_bytes: number | null;
+  uploaded_at: string;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  has_file: boolean;
+}
+
+export interface SupplierDocuments {
+  supplier: { id: string; legal_name: string; status: string };
+  state: ComplianceState | null;
+  requirements: Requirement[];
+  documents: SupplierDocument[];
+}

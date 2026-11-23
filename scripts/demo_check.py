@@ -302,6 +302,20 @@ def run_checks(api: Api, use_docker: bool) -> None:
 
     print("\n5. Supplier performance")
 
+    @step("Supplier compliance: expiring, expired and missing documents found")
+    def _():
+        status, o = api.call("GET", "/api/v1/compliance/overview", who=MANAGER)
+        assert status == 200, f"overview returned {status}"
+        states = o["by_state"]
+        assert o["suppliers"] > 0 and states["VALID"] > 0, "no suppliers checked"
+        assert states["EXPIRED"] + states["MISSING"] + states["EXPIRING"] > 0, "every document is valid?"
+        _, first = api.call("POST", "/api/v1/jobs/compliance-check", who=MANAGER)
+        _, again = api.call("POST", "/api/v1/jobs/compliance-check", who=MANAGER)
+        assert sum(again.values()) == 0, f"reminders repeated: {again}"
+        return (f"{states['EXPIRED']} expired, {states['MISSING']} missing, {states['EXPIRING']} expiring; "
+                f"{sum(first.values())} reminders sent, none repeated")
+    _()
+
     @step("Scorecards computed; a supplier can view its own")
     def _():
         _, body = api.call("GET", "/api/v1/scorecards", who=MANAGER, params={"limit": 500})

@@ -6,6 +6,7 @@ clearly labelled demo values; see ASSUMPTIONS.
 """
 
 ASSUMPTIONS = [
+    "Compliance documents are not described in the case study. Demo values: all valid except Thuto (tax clearance expires in 12 days, B-BBEE certificate expired), Khula (tax clearance expires in 20 days, renewal uploaded and awaiting verification) and Rapid (no B-BBEE certificate).",
     "SMME vs Large Enterprise is taken from the register; no EME/QSE size band was given.",
     "Invoice received date = today minus 'Days Outstanding'; invoice date = received date.",
     "Paid invoices: paid date = received date + 'Days Outstanding'.",

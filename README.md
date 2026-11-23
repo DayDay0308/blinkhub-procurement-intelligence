@@ -192,10 +192,10 @@ Thresholds are stored in `risk.rules.params`, and an Admin can tune them with `P
 | | Planted | Caught | Recall | Precision |
 |---|---|---|---|---|
 | 7 SQL rules | 109 | 109 | **100%** | **95–100%** per rule |
-| ML (Isolation Forest) | 15 | 14 | 93% | 58%: a second opinion, which is why it's paired with rules |
-| **Overall** | **124** | **123** | **99.2%** | **89.8%** (93.4% counting real problems caught by another rule) |
+| ML (Isolation Forest) | 15 | 14 | 93% | about 56–58%: a second opinion, which is why it's paired with rules |
+| **Overall** | **124** | **123** | **99.2%** | **about 89–90%** (92–93% counting real problems caught by another rule) |
 
-CI fails if any SQL rule drops below 95% recall or precision (`tests/test_synthetic_detection.py`).
+The demo year is generated relative to today's date, so precision moves by a point or so between runs; the live figures are on the Risk page ("How accurate is it?"). CI fails if any SQL rule drops below 95% recall or precision (`tests/test_synthetic_detection.py`).
 
 **Supplier scorecards** (`GET /scorecards`, `GET /suppliers/{id}/scorecard`) give each supplier a score from 0 to 100 and a grade from A to E, weighted as follows:
 - delivery reliability: 30%
@@ -212,6 +212,28 @@ KPIs with no data are re-weighted. Suppliers with no activity show `N/A`, so the
 2. Call `GET /risk/flags?rule_code=DUP_INVOICE`. This includes the **case-study duplicates**: INV008 (matches INV002) and INV006 (matches INV001, already paid).
 3. Open a flag, then `POST /risk/flags/{id}/status` with `{"status": "CONFIRMED", "note": "..."}`. Without a note, the request is rejected.
 4. Call `GET /risk/evaluation` for the precision and recall table, then `GET /scorecards?supplier_type=SMME` for the SMME ranking.
+
+### Supplier compliance (Blink compliance module)
+
+Every active supplier needs a **valid tax clearance** and a **B-BBEE certificate or sworn affidavit**. For each one the system works out a state:
+
+| State | Meaning |
+|---|---|
+| Expired | the last verified document has passed its expiry date |
+| Missing | nothing verified has ever been received |
+| Waiting for verification | uploaded, not yet checked by procurement |
+| Expiring soon | verified, but expires within 30 days (`COMPLIANCE_WARNING_DAYS`) |
+| Valid | verified and in date |
+
+- **Upload:** suppliers (or procurement) upload a PDF, PNG or JPG up to 5 MB. The file type is checked from its content, not its name, and the same file can't be uploaded twice.
+- **Verify:** procurement opens the file, copies the issue and expiry dates from it, and marks it verified, or sends it back with a reason the supplier sees. **Whoever uploaded a document can't verify it.** Every step is in the audit log.
+- **Daily check (06:00, Celery):** marks documents past their date as expired and reminds the supplier and procurement, once per document.
+- **Connected:** the `INCOMPLETE_COMPLIANCE` risk rule flags payments to suppliers without a valid tax clearance, and the scorecard's compliance KPI (20%) uses the same documents.
+- Endpoints: `GET /compliance/overview`, `GET|POST /suppliers/{id}/documents`, `POST /compliance/documents/{id}/verify|reject`, `GET /compliance/documents/{id}/file`, `POST /jobs/compliance-check`.
+- Files are stored in a Docker volume locally; on AWS they go to S3 (Phase 6).
+- **Test files:** `demo-documents/` has fictional certificates watermarked *DEMONSTRATION ONLY* (regenerate with `uv run --with reportlab python scripts/make_demo_documents.py`).
+
+Demo: sign in as **Thuto Supplies** → My documents (B-BBEE expired, tax clearance expiring in 12 days) → upload `demo-documents/Thuto_Supplies_BBBEE_Certificate_DEMO.pdf` → sign in as **Palesa (procurement)** → Supplier compliance → Check document → verify → Thuto is valid again.
 
 ### Procurement Intelligence (Problem 3, Path B)
 
@@ -274,7 +296,8 @@ React + TypeScript (Vite), Tailwind CSS, TanStack Query, React Router and Rechar
 | Purchase orders | staff | Delivered vs invoiced per order; record a delivery (re-matches waiting invoices) |
 | Risk monitoring | auditor, manager… | Queue by pattern, evidence, case notes, assign, confirm/dismiss (note required); **accuracy tab** with recall and precision |
 | Supplier performance | staff | A–E scorecards with 5 KPIs; register a supplier with a duplicate-name warning |
-| Supplier portal | supplier | My invoices with status and owner, submit an invoice, my scorecard |
+| Supplier compliance | staff | Expired, missing and expiring documents; check uploads; run the daily check |
+| Supplier portal | supplier | My invoices with status and owner, submit an invoice, my documents, my scorecard |
 | Notifications | everyone | Day-20 reminders and day-25 escalations |
 
 The signature element is the **30-day payment-terms ruler**: every invoice shows where it sits against the day-20 reminder, day-25 escalation and day-30 deadline, so Problem 4 is visible at a glance.
