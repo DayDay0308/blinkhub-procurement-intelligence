@@ -33,9 +33,10 @@ On first start, the API applies database migrations, loads the case-study data, 
 
 | What | Where |
 |---|---|
+| **Web app** (sign in as any demo user) | **http://localhost:8080** |
 | Interactive API docs (Swagger) | http://localhost:8000/docs |
 | Health check | http://localhost:8000/health |
-| PostgreSQL (Power BI, DBeaver) | `localhost:5432`, db `blinkhub`, user/password from `.env` |
+| PostgreSQL (Power BI, DBeaver) | `localhost:5432` (or the `DB_PORT` you set in `.env`), db `blinkhub`, user/password from `.env` |
 | Worker logs (SLA job) | `docker compose logs -f worker` |
 | **Dagster** (dbt lineage, runs, schedule) | http://localhost:3000 |
 | **Power BI** | double-click `powerbi/blinkhub.pbids`; full guide in [`powerbi/README.md`](powerbi/README.md) |
@@ -260,6 +261,30 @@ The kit includes a one-click connection file (`.pbids`), a theme, 30+ DAX measur
   - The app refuses to start outside local/test with the default secret.
   - Errors use one consistent JSON format.
 
+### Web app (Phase 5)
+
+React + TypeScript (Vite), Tailwind CSS, TanStack Query, React Router and Recharts, served by nginx in Docker at **http://localhost:8080**. nginx proxies `/api` to the FastAPI container, so the browser talks to one origin.
+
+| Screen | Who | What it does |
+|---|---|---|
+| Sign in | everyone | Email/password, or one click per demo role |
+| Dashboard | staff | Spend, SMME share vs 30% target, B-BBEE recognition, overdue value, days-to-pay gap, risk. Toggle **Case study / Synthetic year / All** |
+| Invoices | staff | Waiting on me, past terms, exceptions; capture an emailed invoice |
+| Invoice detail | staff, supplier | 30-day terms ruler, plain-language match exceptions, history, approve / reject / pay / link PO |
+| Purchase orders | staff | Delivered vs invoiced per order; record a delivery (re-matches waiting invoices) |
+| Risk monitoring | auditor, manager… | Queue by pattern, evidence, case notes, assign, confirm/dismiss (note required); **accuracy tab** with recall and precision |
+| Supplier performance | staff | A–E scorecards with 5 KPIs; register a supplier with a duplicate-name warning |
+| Supplier portal | supplier | My invoices with status and owner, submit an invoice, my scorecard |
+| Notifications | everyone | Day-20 reminders and day-25 escalations |
+
+The signature element is the **30-day payment-terms ruler**: every invoice shows where it sits against the day-20 reminder, day-25 escalation and day-30 deadline, so Problem 4 is visible at a glance.
+
+Design choices: Public Sans with tabular figures; ink navy for structure; SMME orange and large-enterprise blue are the same series colours as the Power BI report; green/amber/red only ever mean state. Works down to phone width.
+
+![Dashboard](docs/screenshots/web-01-dashboard-case.png)
+![Invoices past terms](docs/screenshots/web-03-invoices.png)
+![Risk flag](docs/screenshots/web-07-flag.png)
+
 ## Repository layout
 
 ```
@@ -272,7 +297,8 @@ backend/
   tests/          pytest suite (real PostgreSQL)
 analytics/        dbt project (staging -> marts) + Dagster orchestration
 analysis/         Path B notebook, raw case-study CSVs, synthetic snapshot
-powerbi/          Power BI connection file, theme, DAX measures, build guide
+frontend/         React + TypeScript web app (Vite, Tailwind, TanStack Query), nginx Dockerfile
+powerbi/          Power BI connection file, theme, DAX measures, report (.pbix), screenshots
 docs/             Architecture, ERD, design viewer
 .github/workflows CI
 ```
@@ -283,7 +309,7 @@ docs/             Architecture, ERD, design viewer
 2. ~~Invoice workflow: supplier submission, 3-way match, approval routing, SLA scheduler (Celery + Redis)~~
 3. ~~Risk engine: 8 explainable rules + Isolation Forest; investigation queue; precision/recall on labelled synthetic data; supplier scorecards~~
 4. ~~Spend intelligence: dbt star schema + tests, Dagster, Power BI report, analysis notebook (Path B)~~
-5. React + TypeScript frontend: internal console and supplier portal
+5. ~~React + TypeScript frontend: internal console and supplier portal~~
 6. AWS deployment; Ask BlinkHub (LLM); certificate document AI
 
 ## Assumptions and limitations

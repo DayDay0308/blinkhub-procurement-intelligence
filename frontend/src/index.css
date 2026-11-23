@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@import "@fontsource/public-sans/400.css";
+@import "@fontsource/public-sans/500.css";
+@import "@fontsource/public-sans/600.css";
+@import "@fontsource/public-sans/700.css";
+
+/* Design tokens. Ink navy for structure; SMME orange / large-enterprise blue are the same
+   series colours as the Power BI report; status colours are reserved for state only. */
+@theme {
+  --font-sans: "Public Sans", system-ui, sans-serif;
+  --color-ink: #1f2a44;
+  --color-ink-soft: #3a4562;
+  --color-paper: #f3f4f1;
+  --color-surface: #ffffff;
+  --color-line: #d9dcd4;
+  --color-line-soft: #e8eae4;
+  --color-muted: #5b6272;
+  --color-large: #2a78d6;
+  --color-smme: #eb6834;
+  --color-good: #138a5f;
+  --color-warn: #b77800;
+  --color-bad: #c8362f;
+  --color-attention: #fff3c4;
+}
+
+html { color-scheme: light; }
+body { @apply bg-paper text-ink font-sans antialiased; font-feature-settings: "tnum" 1; }
+:focus-visible { outline: 2px solid var(--color-large); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

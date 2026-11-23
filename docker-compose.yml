@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-blinkhub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blinkhub}
     ports:
-      - "5440:5432"          # exposed so Power BI Desktop / DBeaver can connect
+      - "${DB_PORT:-5432}:5432"   # host port for Power BI / DBeaver; set DB_PORT in .env if 5432 is taken
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
       SEED_ON_START: ${SEED_ON_START:-true}
       SEED_SYNTHETIC: ${SEED_SYNTHETIC:-true}   # generate the demo year (synthetic, labelled)
       DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@2026!}
-      CORS_ORIGINS: '["http://localhost:5173"]'
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
       REDIS_URL: redis://redis:6379/0
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-local-dev-data-key-change-me}
       SLA_CHECK_MINUTES: ${SLA_CHECK_MINUTES:-15}
@@ -81,6 +81,16 @@ services:
       DBT_DBNAME: blinkhub
     ports:
       - "3000:3000"
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    # React app on nginx; /api is proxied to the api service.
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
     restart: unless-stopped
 
 volumes:

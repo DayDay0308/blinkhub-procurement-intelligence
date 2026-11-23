@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -321,11 +322,11 @@ def run_checks(api: Api, use_docker: bool) -> None:
         print("  [SKIP] Analytics and container checks - Docker CLI not found")
         return
 
-    @step("All 5 containers are running")
+    @step("All 6 containers are running")
     def _():
         out = subprocess.run(["docker", "compose", "ps", "--services", "--filter", "status=running"],
                              capture_output=True, text=True, timeout=60).stdout.split()
-        missing = {"db", "redis", "api", "worker", "dagster"} - set(out)
+        missing = {"db", "redis", "api", "worker", "dagster", "web"} - set(out)
         assert not missing, f"not running: {', '.join(sorted(missing))}"
     _()
 
@@ -349,6 +350,20 @@ def run_checks(api: Api, use_docker: bool) -> None:
         with urllib.request.urlopen("http://localhost:3000/server_info", timeout=15) as r:
             info = json.loads(r.read())
         return f"Dagster {info['dagster_version']}"
+    _()
+
+    @step("Web app is up and reaches the API through nginx (http://localhost:8080)")
+    def _():
+        web = os.environ.get("WEB_URL", "http://localhost:8080")
+        with urllib.request.urlopen(web + "/", timeout=15) as r:
+            assert b'id="root"' in r.read(), "web page did not load"
+        with urllib.request.urlopen(web + "/login", timeout=15) as r:
+            assert r.status == 200, "deep links are not served (SPA fallback)"
+        req = urllib.request.Request(web + "/api/v1/auth/login", method="POST",
+                                     data=urllib.parse.urlencode({"username": "manager@mics.demo", "password": PASSWORD}).encode())
+        with urllib.request.urlopen(req, timeout=15) as r:
+            assert "access_token" in json.loads(r.read()), "sign-in through the web proxy failed"
+        return "page, deep link and /api proxy OK"
     _()
 
 
