@@ -5,6 +5,7 @@ uv run python -m seed.run --reset    # wipe transactional + master data first
 """
 
 import argparse
+import hashlib
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
-from app.models import Category, Department, Invoice, PurchaseOrder, Supplier, User
+from app.models import Category, Department, Document, Invoice, PurchaseOrder, Supplier, User
 from seed import case_study as cs
 
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "Demo@2026!")
@@ -123,6 +124,22 @@ def load(db: Session, now: datetime | None = None) -> dict[str, int]:
                 "since": now - timedelta(days=365),
             },
         )
+    # Valid compliance documents for the case-study suppliers (demo values; the case study
+    # does not describe their documents).
+    for s in suppliers.values():
+        for doc_type in ("TAX_CLEARANCE", "BBBEE_CERTIFICATE"):
+            db.add(
+                Document(
+                    supplier_id=s.id,
+                    doc_type=doc_type,
+                    status="VERIFIED",
+                    storage_key=f"demo/{s.supplier_code}/{doc_type.lower()}.pdf",
+                    sha256=hashlib.sha256(f"{s.id}{doc_type}".encode()).hexdigest(),
+                    issue_date=(now - timedelta(days=60)).date(),
+                    expiry_date=(now + timedelta(days=300)).date(),
+                )
+            )
+    db.flush()
     return {
         "suppliers": len(suppliers),
         "purchase_orders": len(cs.PURCHASE_ORDERS),
@@ -134,6 +151,9 @@ def load(db: Session, now: datetime | None = None) -> dict[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true")
+    parser.add_argument(
+        "--synthetic", action="store_true", default=os.getenv("SEED_SYNTHETIC", "false").lower() == "true"
+    )
     args = parser.parse_args()
     with SessionLocal() as db, db.begin():
         if args.reset:
@@ -142,7 +162,14 @@ def main() -> None:
             print("Database already has data; skipping (use --reset to reload).")
             return
         counts = load(db)
-    print("Seeded case-study data:", counts)
+        print("Seeded case-study data:", counts)
+        if args.synthetic:
+            from seed.synthetic import generate
+
+            print("Generated synthetic demo year (DEMONSTRATION DATA ONLY):", generate(db))
+        from app.services.risk import run_risk_engine
+
+        print("Initial risk scan:", run_risk_engine(db))
     print(f"Demo users share the password {DEMO_PASSWORD!r} (demo only).")
 
 

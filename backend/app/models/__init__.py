@@ -10,7 +10,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Computed, ForeignKey, LargeBinary, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, ENUM
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -69,6 +69,25 @@ PoStatus = pg_enum(
     "CANCELLED",
 )
 InvoiceStatus = pg_enum("invoice_status", "p2p", *INVOICE_STATUSES)
+Severity = pg_enum("severity", "risk", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+FLAG_STATUSES = ("OPEN", "UNDER_REVIEW", "ESCALATED", "DISMISSED", "CONFIRMED")
+FlagStatus = pg_enum("flag_status", "risk", *FLAG_STATUSES)
+DocType = pg_enum(
+    "doc_type",
+    "compliance",
+    "TAX_CLEARANCE",
+    "BBBEE_CERTIFICATE",
+    "BBBEE_AFFIDAVIT",
+    "CIPC_REGISTRATION",
+    "BANK_CONFIRMATION",
+    "CSD_REPORT",
+    "COID_LETTER",
+    "OTHER",
+)
+DocStatus = pg_enum("doc_status", "compliance", "UPLOADED", "EXTRACTED", "VERIFIED", "REJECTED", "EXPIRED")
+OpportunityStatus = pg_enum(
+    "opportunity_status", "sourcing", "DRAFT", "OPEN", "CLOSED", "EVALUATING", "AWARDED", "CANCELLED"
+)
 ApprovalDecision = pg_enum("approval_decision", "p2p", "PENDING", "APPROVED", "REJECTED", "ESCALATED")
 
 
@@ -144,6 +163,7 @@ class PurchaseOrder(Base):
     approved_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
     approved_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expected_delivery_date: Mapped[date | None]
 
     supplier: Mapped[Supplier] = relationship(lazy="joined")
     department: Mapped[Department] = relationship(lazy="joined")
@@ -242,3 +262,117 @@ class Notification(Base):
     body: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     read_at: Mapped[datetime | None]
+
+
+class SupplierCategory(Base):
+    __tablename__ = "supplier_categories"
+    __table_args__ = {"schema": "core"}
+    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("core.suppliers.id"), primary_key=True)
+    category_id: Mapped[UUID] = mapped_column(ForeignKey("core.categories.id"), primary_key=True)
+
+
+class PurchaseOrderLine(Base):
+    __tablename__ = "purchase_order_lines"
+    __table_args__ = {"schema": "p2p"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    po_id: Mapped[UUID] = mapped_column(ForeignKey("p2p.purchase_orders.id"))
+    line_no: Mapped[int]
+    item_code: Mapped[str | None] = mapped_column(String(40))
+    description: Mapped[str] = mapped_column(String(300))
+    quantity: Mapped[Decimal]
+    unit: Mapped[str] = mapped_column(String(20), server_default="EA")
+    unit_price: Mapped[Decimal]
+    line_total: Mapped[Decimal] = mapped_column(Computed("round(quantity * unit_price, 2)", persisted=True))
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    __table_args__ = {"schema": "compliance"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("core.suppliers.id"))
+    doc_type: Mapped[str] = mapped_column(DocType)
+    storage_key: Mapped[str]
+    sha256: Mapped[str] = mapped_column(String(64))
+    issue_date: Mapped[date | None]
+    expiry_date: Mapped[date | None]
+    status: Mapped[str] = mapped_column(DocStatus, server_default="UPLOADED")
+    extracted_data: Mapped[dict | None] = mapped_column(JSONB)
+    extraction_confidence: Mapped[Decimal | None]
+    verified_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
+    verified_at: Mapped[datetime | None]
+    uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+    __table_args__ = {"schema": "sourcing"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    reference: Mapped[str] = mapped_column(String(30), unique=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None]
+    category_id: Mapped[UUID] = mapped_column(ForeignKey("core.categories.id"))
+    department_id: Mapped[UUID] = mapped_column(ForeignKey("core.departments.id"))
+    province: Mapped[str | None] = mapped_column(Province)
+    estimated_value: Mapped[Decimal | None]
+    smme_set_aside: Mapped[bool] = mapped_column(server_default="false")
+    closes_at: Mapped[datetime]
+    status: Mapped[str] = mapped_column(OpportunityStatus, server_default="DRAFT")
+    awarded_supplier_id: Mapped[UUID | None] = mapped_column(ForeignKey("core.suppliers.id"))
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("core.users.id"))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class Quotation(Base):
+    __tablename__ = "quotations"
+    __table_args__ = {"schema": "sourcing"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    opportunity_id: Mapped[UUID] = mapped_column(ForeignKey("sourcing.opportunities.id"))
+    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("core.suppliers.id"))
+    amount: Mapped[Decimal]
+    submitted_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    score: Mapped[Decimal | None]
+
+
+class RiskRule(Base):
+    __tablename__ = "rules"
+    __table_args__ = {"schema": "risk"}
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str]
+    severity: Mapped[str] = mapped_column(Severity)
+    params: Mapped[dict] = mapped_column(JSONB, server_default="{}")
+    is_enabled: Mapped[bool] = mapped_column(server_default="true")
+
+
+class RiskFlag(Base):
+    __tablename__ = "flags"
+    __table_args__ = {"schema": "risk"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    rule_code: Mapped[str] = mapped_column(ForeignKey("risk.rules.code"))
+    entity_type: Mapped[str] = mapped_column(String(30))
+    entity_id: Mapped[UUID]
+    supplier_id: Mapped[UUID | None] = mapped_column(ForeignKey("core.suppliers.id"))
+    score: Mapped[Decimal]
+    severity: Mapped[str] = mapped_column(Severity)
+    explanation: Mapped[dict] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(FlagStatus, server_default="OPEN")
+    assigned_to: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
+    detected_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    resolved_at: Mapped[datetime | None]
+    resolved_by: Mapped[UUID | None] = mapped_column(ForeignKey("core.users.id"))
+
+    rule: Mapped[RiskRule] = relationship(lazy="joined")
+    supplier: Mapped[Supplier | None] = relationship(lazy="joined")
+
+
+class CaseNote(Base):
+    __tablename__ = "case_notes"
+    __table_args__ = {"schema": "risk"}
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    flag_id: Mapped[UUID] = mapped_column(ForeignKey("risk.flags.id"))
+    author_id: Mapped[UUID] = mapped_column(ForeignKey("core.users.id"))
+    note: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    author: Mapped[User] = relationship(lazy="joined")

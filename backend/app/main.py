@@ -5,7 +5,16 @@ import uuid
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, invoices, notifications, purchase_orders, suppliers
+from app.api.routes import (
+    auth,
+    health,
+    invoices,
+    notifications,
+    purchase_orders,
+    risk,
+    scorecards,
+    suppliers,
+)
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 
@@ -21,8 +30,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=s.app_name,
         version="0.1.0",
-        description="Procure-to-pay visibility, invoice tracking and risk flags for BlinkHub. "
-        "Demonstration data only.",
+        description="Blink modules: P2P Control (invoice workflow), Supplier Performance & Risk "
+        "(risk engine, scorecards). Demonstration data only.",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -57,6 +66,8 @@ def create_app() -> FastAPI:
     api.include_router(invoices.router)
     api.include_router(purchase_orders.router)
     api.include_router(notifications.router)
+    api.include_router(risk.router)
+    api.include_router(scorecards.router)
     app.include_router(health.router)
     app.include_router(api)
     return app

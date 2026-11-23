@@ -109,18 +109,45 @@ flowchart LR
 
 ## 5. Risk rules (explainable)
 
+Implemented in `backend/app/services/risk/`. Each rule is a single SQL query, with thresholds in `risk.rules.params`.
+
 | Code | Detects | Logic (summary) | Case-study link |
 |---|---|---|---|
-| `DUP_INVOICE_EXACT` | Same supplier, same normalised invoice no. | Blocked at submission | "Two invoices with same number and amount" |
-| `DUP_INVOICE_FUZZY` | Same supplier + amount within N days, or invoice for an already-paid PO | Amount match + date window + trigram similarity | Thuto INV002/INV008, Ubuntu INV006 |
-| `SPLIT_THRESHOLD` | Payments just below an approval limit | ≥ 3 transactions in 30 days within 90–100% of a threshold | "Several payments just below threshold" |
-| `NO_DELIVERY_EVIDENCE` | Invoice paid or approved without a GRN | Left join to `goods_receipts` | "Paid despite incomplete delivery documentation" |
-| `BANK_CHANGE_BEFORE_PAY` | Bank details changed shortly before payment | Change within 14 days of payment | "Banking details changed shortly before payment" |
-| `QUOTE_COLLUSION` | Unusually similar quotes | Coefficient of variation across quotes < 2% | "Unusually similar pricing" |
-| `CONCENTRATION` | One supplier dominating a category | Supplier share > 40% of category, or category HHI > 2,500 | "Disproportionately large share" |
-| `ANOMALY_ML` | Unusual spend patterns | Isolation Forest on amount, frequency, timing and supplier-age features | "Unusual expenditure patterns" |
+| `DUP_INVOICE` | Duplicate billing | Exact repeats are blocked at submission (unique index). Near-duplicates: same supplier and amount on the same PO; or one without a PO within 60 days; or different POs raised within 7 days (excludes recurring monthly contracts) | Thuto INV002/INV008, Ubuntu INV006 |
+| `SPLIT_THRESHOLD` | Orders split to avoid approval | 3+ orders, same supplier and department, within 30 days (by **PO date**), each at 90–100% of an approval limit | "Several payments just below threshold" |
+| `NO_DELIVERY_EVIDENCE` | Paid without proof of delivery | Approved or paid invoice with no PO or no GRN | "Paid despite incomplete delivery documentation" |
+| `BANK_CHANGE_BEFORE_PAY` | Payment redirection | Paid into an account that replaced the previous one within 14 days | "Banking details changed shortly before payment" |
+| `QUOTE_SIMILARITY` | Collusion or cover pricing | 3+ quotes with coefficient of variation < 2% | "Unusually similar pricing" |
+| `CONCENTRATION` | Supplier dominance | Top supplier > 40% of a category's 12-month spend; HHI reported | "Disproportionately large share" |
+| `INCOMPLETE_COMPLIANCE` | Paying non-compliant suppliers | Active supplier paid in the last 90 days without a valid tax clearance | Path B Option 3 |
+| `ANOMALY_ML` | Unusual expenditure | Isolation Forest on amount vs supplier and category norms, volume, round amounts, weekend submission; each flag explained with robust z-scores | "Unusual expenditure patterns" |
 
-**Proving it works:** the synthetic data generator plants labelled anomalies of each type. The test suite and the dashboard report **precision and recall per rule**, so detection is measured, not just claimed.
+**Proving it works.** The synthetic generator plants labelled anomalies of each type and also includes legitimate look-alikes, such as monthly contracts billing identical amounts. `GET /risk/evaluation` reports precision and recall per rule:
+
+| Measure | Result |
+|---|---|
+| Overall recall | **99.2%** (123 of 124 planted anomalies caught) |
+| Overall precision | **89.8%** (93.4% counting real problems caught by another rule) |
+| SQL rules | 95–100% precision per rule |
+| ML | 58% precision: a second opinion |
+
+**Two refinements found through evaluation**, which make good talking points:
+1. Recurring monthly contracts made the duplicate rule fire, so it now compares how far apart the **POs** were raised.
+2. Late deliveries spread split orders apart in time, so the split rule now measures the window on **PO dates**, not invoice dates.
+
+## 5b. Supplier performance scorecard
+
+Blink's buyer module promises "track supplier performance", and the scorecard (`app/services/scorecard.py`) delivers it. Each supplier gets five KPIs, each scored from 0 to 100:
+
+| KPI | Weight | Measures |
+|---|---|---|
+| Delivery reliability | 30% | Received on or before the expected date |
+| Invoice accuracy | 25% | Has a PO, is within the PO value, not flagged as a duplicate or as having no delivery evidence |
+| Compliance | 20% | Valid, verified tax clearance and B-BBEE certificate; expiring within 30 days = 75 |
+| Risk record | 15% | Open or confirmed flags weighted by severity (concentration excluded, because it isn't misconduct) |
+| Price competitiveness | 10% | Unit prices against the market median for the same item code |
+
+KPIs without data are re-weighted. Suppliers with no activity are `N/A`, never ranked.
 
 ## 6. Technology stack
 
@@ -132,7 +159,7 @@ flowchart LR
 | Database | PostgreSQL 16 (pgcrypto, pg_trgm) |
 | Async | Celery + Redis (SLA scheduler, risk runs, notifications) |
 | Analytics | dbt-core (dbt-postgres), Dagster |
-| ML / AI | scikit-learn (Isolation Forest), LLM API for document extraction and Ask BlinkHub |
+| ML / AI | scikit-learn Isolation Forest + NumPy (risk); LLM API for document extraction and Ask BlinkHub (Phase 6) |
 | Storage | MinIO (S3-compatible) |
 | Quality | pytest, Playwright (E2E), dbt tests, Ruff, mypy, ESLint |
 | Delivery | Docker Compose (one command), GitHub Actions CI (lint → test → build) |
@@ -155,7 +182,7 @@ flowchart LR
 |---|---|
 | 1. Foundation | Repo, Docker Compose, schema + migrations, synthetic data generator (sample data + expansion), auth |
 | 2. Invoice Tracker | Submission, 3-way match, approval routing, SLA scheduler, supplier status view |
-| 3. Risk Engine | Rules, Isolation Forest, flags API, investigation queue UI, precision/recall evaluation |
+| 3. Risk Engine ✅ | Rules, Isolation Forest, flags API, investigation queue, precision/recall evaluation, supplier scorecards, synthetic demo year |
 | 4. Spend Intelligence | dbt marts + tests, Dagster, management dashboard |
 | 5. Stretch | Ask BlinkHub, certificate document AI, CI/CD polish |
 | 6. Presentation | Findings on the provided sample, demo script, limitations, next steps |

@@ -16,6 +16,8 @@ dependencies = [
   "pwdlib[argon2]>=0.2",
   "python-multipart>=0.0.9",
   "celery[redis]>=5.4",
+  "scikit-learn>=1.5",
+  "numpy>=2.0",
 ]
 
 [dependency-groups]
@@ -36,4 +38,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
-ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+ignore = [
+  "B008",  # FastAPI Depends() in defaults is idiomatic
+  "E501",  # line length is enforced by `ruff format`; long SQL strings are left readable
+]

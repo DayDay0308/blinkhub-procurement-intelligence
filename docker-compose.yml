@@ -42,6 +42,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-local}
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-0123456789}
       SEED_ON_START: ${SEED_ON_START:-true}
+      SEED_SYNTHETIC: ${SEED_SYNTHETIC:-true}   # generate the demo year (synthetic, labelled)
       DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@2026!}
       CORS_ORIGINS: '["http://localhost:5173"]'
       REDIS_URL: redis://redis:6379/0
