@@ -1,0 +1,9 @@
+Invoice,Supplier,Amount,Days Outstanding,Status
+INV001,Ubuntu Cleaning,"R85,000",15,Paid
+INV002,Thuto Supplies,"R35,000",42,Outstanding
+INV003,Metro Logistics,"R620,000",65,Outstanding
+INV004,Khula Electrical,"R95,000",12,Paid
+INV005,Rapid Transport,"R180,000",38,Outstanding
+INV006,Ubuntu Cleaning,"R85,000",47,Outstanding
+INV007,Prime Facilities,"R450,000",8,Paid
+INV008,Thuto Supplies,"R35,000",42,Outstanding

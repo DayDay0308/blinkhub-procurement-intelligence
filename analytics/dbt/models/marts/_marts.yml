@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: dim_supplier
+    description: One row per supplier. `data_source` separates the case-study sample from synthetic demo data.
+    columns:
+      - name: supplier_id
+        tests: [unique, not_null]
+      - name: supplier_type
+        tests:
+          - accepted_values: {arguments: {values: ["SMME", "LARGE_ENTERPRISE"]}}
+      - name: data_source
+        tests:
+          - not_null
+          - accepted_values: {arguments: {values: ["CASE_STUDY", "SYNTHETIC"]}}
+      - name: bbbee_recognition
+        description: B-BBEE procurement recognition level (Level 1 = 135% ... Level 8 = 10%, non-compliant = 0%).
+        tests: [not_null]
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+  - name: dim_department
+    columns:
+      - name: department_id
+        tests: [unique, not_null]
+  - name: dim_category
+    columns:
+      - name: category_id
+        tests: [unique, not_null]
+
+  - name: fct_purchase_orders
+    description: Grain = one purchase order. Spend = committed PO value.
+    columns:
+      - name: po_id
+        tests: [unique, not_null]
+      - name: supplier_id
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_supplier'), field: supplier_id}}
+      - name: department_id
+        tests:
+          - relationships: {arguments: {to: ref('dim_department'), field: department_id}}
+      - name: category_id
+        tests:
+          - relationships: {arguments: {to: ref('dim_category'), field: category_id}}
+      - name: order_date_key
+        tests:
+          - relationships: {arguments: {to: ref('dim_date'), field: date_key}}
+      - name: po_amount
+        tests: [not_null]
+
+  - name: fct_invoices
+    description: Grain = one invoice, with payment-performance measures.
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+      - name: supplier_id
+        tests:
+          - relationships: {arguments: {to: ref('dim_supplier'), field: supplier_id}}
+      - name: received_date_key
+        tests:
+          - relationships: {arguments: {to: ref('dim_date'), field: date_key}}
+      - name: ageing_bucket
+        tests:
+          - accepted_values: {arguments: {values: ["Closed", "0-30 days", "31-60 days", "61-90 days", "90+ days"]}}
+
+  - name: fct_deliveries
+    columns:
+      - name: grn_id
+        tests: [unique, not_null]
+
+  - name: fct_risk_flags
+    columns:
+      - name: flag_id
+        tests: [unique, not_null]
+      - name: severity
+        tests:
+          - accepted_values: {arguments: {values: ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}}
+
+  - name: mart_supplier_spend
+    columns:
+      - name: abc_class
+        tests:
+          - accepted_values: {arguments: {values: ["A", "B", "C"]}}

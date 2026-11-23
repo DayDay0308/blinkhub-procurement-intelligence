@@ -1,0 +1,13 @@
+# Connection comes from environment variables (12-factor). Defaults suit local development.
+blinkhub:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | int }}"
+      user: "{{ env_var('DBT_USER', 'blinkhub') }}"
+      password: "{{ env_var('DBT_PASSWORD', 'blinkhub') }}"
+      dbname: "{{ env_var('DBT_DBNAME', 'blinkhub') }}"
+      schema: analytics
+      threads: 4

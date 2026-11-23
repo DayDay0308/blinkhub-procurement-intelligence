@@ -1,0 +1,13 @@
+PO Number,Supplier,Category,Department,Amount
+PO001,Ubuntu Cleaning,Cleaning,Facilities,"R85,000"
+PO002,Prime Facilities,Cleaning,Facilities,"R450,000"
+PO003,Thuto Supplies,Stationery,Administration,"R35,000"
+PO004,Metro Logistics,Transport,Operations,"R620,000"
+PO005,Khula Electrical,Maintenance,Infrastructure,"R95,000"
+PO006,Rapid Transport,Transport,Operations,"R180,000"
+PO007,Apex Infrastructure,Construction,Infrastructure,"R1,200,000"
+PO008,Ubuntu Cleaning,Cleaning,Facilities,"R95,000"
+PO009,Prime Facilities,Cleaning,Operations,"R390,000"
+PO010,Thuto Supplies,Stationery,Administration,"R42,000"
+PO011,Metro Logistics,Transport,Operations,"R710,000"
+PO012,Khula Electrical,Maintenance,Infrastructure,"R125,000"

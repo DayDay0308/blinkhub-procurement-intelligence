@@ -1,7 +1,8 @@
 # BlinkHub Procurement Intelligence — local stack
 #   docker compose up --build
 #   API docs: http://localhost:8000/docs
-# Services: db (PostgreSQL), redis (queue), api (FastAPI), worker (Celery + beat: SLA checks)
+# Services: db (PostgreSQL), redis (queue), api (FastAPI), worker (Celery + beat: SLA checks, nightly risk scan),
+#           dagster (dbt analytics marts for Power BI, UI on http://localhost:3000)
 
 name: blinkhub
 
@@ -63,6 +64,23 @@ services:
     environment:
       <<: *app-env
       SEED_ON_START: "false"
+    restart: unless-stopped
+
+  dagster:
+    build: ./analytics
+    # Builds the analytics marts (dbt) on start, then serves Dagster on :3000.
+    # Schedule: daily at 03:00, after the worker's 02:00 risk scan.
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DBT_HOST: db
+      DBT_PORT: "5432"
+      DBT_USER: ${POSTGRES_USER:-blinkhub}
+      DBT_PASSWORD: ${POSTGRES_PASSWORD:-blinkhub}
+      DBT_DBNAME: blinkhub
+    ports:
+      - "3000:3000"
     restart: unless-stopped
 
 volumes:

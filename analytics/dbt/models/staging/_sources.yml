@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: core
+    description: Master data owned by the BlinkHub API.
+    tables:
+      - name: suppliers
+      - name: departments
+      - name: categories
+  - name: p2p
+    description: Procure-to-pay transactions.
+    tables:
+      - name: purchase_orders
+      - name: purchase_order_lines
+      - name: goods_receipts
+      - name: invoices
+      - name: payments
+  - name: compliance
+    tables:
+      - name: documents
+  - name: risk
+    tables:
+      - name: flags
+      - name: rules

@@ -1,0 +1,13 @@
+rule_name,severity,flags,value_at_risk
+Paid without delivery evidence,HIGH,24,591315.45
+Unusual invoice (machine learning),CRITICAL,18,9983301.85
+Payments just below an approval limit,HIGH,15,709665.64
+Paid while non-compliant,MEDIUM,15,0
+Payments just below an approval limit,CRITICAL,14,670283.72
+Possible duplicate invoice,CRITICAL,13,632850.93
+Possible duplicate invoice,HIGH,12,259268.62
+Unusually similar quotations,HIGH,8,0
+Bank details changed shortly before payment,CRITICAL,7,158255.16
+Unusual invoice (machine learning),HIGH,6,702805.33
+Bank details changed shortly before payment,HIGH,3,33251.89
+Supplier concentration in a category,HIGH,2,0

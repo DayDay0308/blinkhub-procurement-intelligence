@@ -1,0 +1,118 @@
+// =====================================================================
+// BlinkHub Procurement Intelligence: DAX measures
+// Create a table named "_Measures" (Home > Enter data > name it _Measures > Load),
+// then add each measure below to it (Modeling > New measure). Format notes in [brackets].
+// =====================================================================
+
+// ---------- Spend & transformation (Problem 3, Path B Options 1-2) ----------
+Total Spend = SUM ( fct_purchase_orders[po_amount] )                       // [Currency R, 0 dp]
+
+SMME Spend =
+CALCULATE ( [Total Spend], fct_purchase_orders[is_smme] = TRUE () )         // [Currency R]
+
+SMME Share % = DIVIDE ( [SMME Spend], [Total Spend] )                      // [Percentage, 1 dp]
+
+SMME Target % = 0.30                                                       // [Percentage] policy target - change here
+
+SMME Gap to Target % = [SMME Target %] - [SMME Share %]                     // [Percentage]
+
+B-BBEE Recognised Spend = SUM ( fct_purchase_orders[bbbee_recognised_amount] )   // [Currency R]
+
+B-BBEE Recognition % = DIVIDE ( [B-BBEE Recognised Spend], [Total Spend] ) // [Percentage] 135% max (all Level 1)
+
+Black Women Owned Spend % =
+DIVIDE (
+    CALCULATE ( [Total Spend], fct_purchase_orders[is_black_women_owned] = TRUE () ),
+    [Total Spend]
+)                                                                          // [Percentage]
+
+Suppliers Paid = DISTINCTCOUNT ( fct_purchase_orders[supplier_id] )        // [Whole number]
+
+Spend Fiscal YTD = TOTALYTD ( [Total Spend], dim_date[date], "31/3" )      // [Currency R] SA fiscal year Apr-Mar
+
+Spend Previous Month =
+CALCULATE ( [Total Spend], DATEADD ( dim_date[date], -1, MONTH ) )
+
+Spend MoM % = DIVIDE ( [Total Spend] - [Spend Previous Month], [Spend Previous Month] )   // [Percentage]
+
+// ---------- Concentration (Problem 6 "disproportionate share") ----------
+Top Supplier Share % =
+VAR TopSpend = MAXX ( VALUES ( dim_supplier[supplier_id] ), [Total Spend] )
+RETURN DIVIDE ( TopSpend, [Total Spend] )                                   // [Percentage]
+
+HHI =
+// Herfindahl-Hirschman Index within the current filter (e.g. per category): 0-10,000.
+// >2,500 highly concentrated, 1,500-2,500 moderate.
+VAR Total = [Total Spend]
+RETURN
+    SUMX (
+        VALUES ( dim_supplier[supplier_id] ),
+        POWER ( DIVIDE ( [Total Spend], Total ), 2 )
+    ) * 10000                                                              // [Whole number]
+
+Concentration Band =
+SWITCH ( TRUE (), [HHI] > 2500, "Highly concentrated", [HHI] > 1500, "Moderately concentrated", "Competitive" )
+
+// ---------- Invoice & payment performance (Problem 4) ----------
+Invoices = COUNTROWS ( fct_invoices )
+
+Open Invoices = CALCULATE ( [Invoices], fct_invoices[is_open] = TRUE () )
+
+Overdue Invoices =
+CALCULATE ( [Invoices], fct_invoices[is_open] = TRUE (), fct_invoices[days_outstanding] > 30 )
+
+Overdue Value =
+CALCULATE ( SUM ( fct_invoices[invoice_amount] ), fct_invoices[is_open] = TRUE (), fct_invoices[days_outstanding] > 30 )   // [Currency R]
+
+Overdue SMME Invoices = CALCULATE ( [Overdue Invoices], fct_invoices[is_smme] = TRUE () )
+
+Avg Days to Pay = AVERAGE ( fct_invoices[days_to_pay] )                    // [Decimal, 1 dp]
+
+Avg Days to Pay SMME = CALCULATE ( [Avg Days to Pay], fct_invoices[is_smme] = TRUE () )
+
+Avg Days to Pay Large = CALCULATE ( [Avg Days to Pay], fct_invoices[is_smme] = FALSE () )
+
+SMME Payment Gap (days) = [Avg Days to Pay SMME] - [Avg Days to Pay Large] // [Decimal, 1 dp]
+
+% Paid Within Terms =
+DIVIDE (
+    CALCULATE ( [Invoices], fct_invoices[paid_within_terms] = TRUE () ),
+    CALCULATE ( [Invoices], fct_invoices[is_paid] = TRUE () )
+)                                                                          // [Percentage]
+
+% Invoices Without PO =
+DIVIDE ( CALCULATE ( [Invoices], fct_invoices[has_po] = FALSE () ), [Invoices] )   // [Percentage]
+
+// ---------- Supplier performance ----------
+On-Time Delivery % =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( fct_deliveries ), fct_deliveries[is_on_time] = TRUE () ),
+    COUNTROWS ( fct_deliveries )
+)                                                                          // [Percentage]
+
+Avg Days Late (late deliveries) =
+CALCULATE ( AVERAGE ( fct_deliveries[days_late] ), fct_deliveries[is_on_time] = FALSE () )
+
+// ---------- Risk (Problem 6) ----------
+Open Flags = CALCULATE ( COUNTROWS ( fct_risk_flags ), fct_risk_flags[is_open] = TRUE () )
+
+Critical & High Flags =
+CALCULATE ( [Open Flags], fct_risk_flags[severity] IN { "CRITICAL", "HIGH" } )
+
+Value Under Review =
+CALCULATE ( SUM ( fct_risk_flags[value_at_risk] ), fct_risk_flags[is_open] = TRUE () )   // [Currency R]
+
+Confirmed Flags = CALCULATE ( COUNTROWS ( fct_risk_flags ), fct_risk_flags[flag_status] = "CONFIRMED" )
+
+// ---------- Honesty banner ----------
+Data Source Note =
+VAR Sources = VALUES ( dim_supplier[data_source] )
+RETURN
+    SWITCH (
+        TRUE (),
+        COUNTROWS ( Sources ) = 1 && SELECTEDVALUE ( dim_supplier[data_source] ) = "CASE_STUDY",
+            "Case-study sample data (as provided)",
+        COUNTROWS ( Sources ) = 1,
+            "SYNTHETIC demonstration data - not MICS performance",
+        "Mixed: case-study sample + SYNTHETIC demonstration data"
+    )

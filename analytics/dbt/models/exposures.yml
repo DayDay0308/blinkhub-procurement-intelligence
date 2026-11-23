@@ -1,0 +1,23 @@
+version: 2
+
+exposures:
+  - name: powerbi_procurement_intelligence
+    label: Power BI · Procurement Intelligence report
+    type: dashboard
+    maturity: medium
+    url: https://github.com/DayDay0308/blinkhub-procurement-intelligence/tree/main/powerbi
+    description: >
+      Four-page Power BI report (Executive overview, Spend & SMME, Invoice performance, Risk).
+      Connects to the `analytics` schema in import mode.
+    depends_on:
+      - ref('fct_purchase_orders')
+      - ref('fct_invoices')
+      - ref('fct_deliveries')
+      - ref('fct_risk_flags')
+      - ref('dim_supplier')
+      - ref('dim_department')
+      - ref('dim_category')
+      - ref('dim_date')
+    owner:
+      name: David Ramokgola
+      email: dramokgola1999@gmail.com

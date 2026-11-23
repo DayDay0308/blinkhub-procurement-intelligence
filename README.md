@@ -14,6 +14,7 @@ A working prototype for the **BlinkHub Procurement Innovation Challenge** (MICS 
 | 4. The invoice that never gets paid | Invoice ageing, 30-day SLA ladder, accountable approver, supplier self-service status |
 | 6. Something doesn't look right | Explainable risk flags in an investigation queue: 8 rules + an ML model, with measured precision/recall |
 | Blink: "track supplier performance" | Supplier scorecards: delivery, invoice accuracy, compliance, risk record, price |
+| 3. Where is the money? (Path B) | dbt star schema (40 data tests), Dagster schedule, **Power BI report**, analysis notebook answering the 7 investigation questions |
 
 Full reasoning: [docs/architecture.md](docs/architecture.md) · Data model: [docs/erd.md](docs/erd.md)
 
@@ -36,6 +37,26 @@ On first start, the API applies database migrations, loads the case-study data, 
 | Health check | http://localhost:8000/health |
 | PostgreSQL (Power BI, DBeaver) | `localhost:5432`, db `blinkhub`, user/password from `.env` |
 | Worker logs (SLA job) | `docker compose logs -f worker` |
+| **Dagster** (dbt lineage, runs, schedule) | http://localhost:3000 |
+| **Power BI** | double-click `powerbi/blinkhub.pbids`; full guide in [`powerbi/README.md`](powerbi/README.md) |
+| **Analysis notebook (Path B)** | [`analysis/01_procurement_analysis.ipynb`](analysis/01_procurement_analysis.ipynb) (renders on GitHub) |
+
+### Check everything works (run before every demo)
+
+```bash
+python scripts/demo_check.py        # Windows, if `python` isn't found: uv run --no-project python scripts/demo_check.py
+```
+
+This runs the whole story against the running stack the way real users would:
+1. all roles sign in
+2. the case-study data and its 5 overdue invoices are present
+3. a supplier submits an invoice, it's delivered, approved and paid, and the supplier sees the timeline
+4. SLA alerts fire
+5. the risk scan flags the case-study duplicates, and detection rates hold
+6. scorecards are computed
+7. the dbt marts match the Power BI check numbers, and all 5 containers plus Dagster are up
+
+It prints PASS or FAIL for each step, is safe to run repeatedly, and needs only the Python standard library.
 
 ### Demo accounts
 
@@ -191,6 +212,35 @@ KPIs with no data are re-weighted. Suppliers with no activity show `N/A`, so the
 3. Open a flag, then `POST /risk/flags/{id}/status` with `{"status": "CONFIRMED", "note": "..."}`. Without a note, the request is rejected.
 4. Call `GET /risk/evaluation` for the precision and recall table, then `GET /scorecards?supplier_type=SMME` for the SMME ranking.
 
+### Procurement Intelligence (Problem 3, Path B)
+
+**Analysis notebook:** [`analysis/01_procurement_analysis.ipynb`](analysis/01_procurement_analysis.ipynb). It starts from the case-study tables *exactly as printed* ("R85,000", "KZN"), then:
+- cleans and validates them with 6 data-quality checks
+- answers all **7 investigation questions** with charts
+- extends the analysis with the synthetic year, clearly labelled
+- ends with findings, 8 costed recommendations, and assumptions and limitations
+
+**dbt** (`analytics/dbt`) builds a star schema in the `analytics` schema:
+- **Dimensions:** `dim_supplier` (with B-BBEE procurement recognition, Level 1 = 135%), `dim_date` (SA fiscal year Apr–Mar), `dim_department`, `dim_category`.
+- **Facts:**
+  - `fct_purchase_orders` (spend)
+  - `fct_invoices` (days to pay, ageing, paid within terms)
+  - `fct_deliveries` (on-time)
+  - `fct_risk_flags` (value at risk)
+- **Marts:** monthly KPIs, Pareto/ABC supplier ranking, HHI concentration.
+- **Tests:** 40 data tests, including *every rand of PO spend reconciles to the app*, *no invoice paid before it was received* and referential integrity. A dbt **exposure** documents the Power BI dependency.
+- **Every row carries `data_source`** (`CASE_STUDY` or `SYNTHETIC`), so no report can mix up real and demo data without saying so.
+
+**Dagster** (`analytics/orchestration`) turns each dbt model into an asset with full lineage. It's scheduled daily at **03:00**, after the worker's 02:00 risk scan. The UI is at http://localhost:3000.
+
+**Power BI** (`powerbi/`) has a four-page report spec:
+1. Executive overview
+2. Spend & SMME
+3. Invoice performance
+4. Risk & supplier performance
+
+The kit includes a one-click connection file (`.pbids`), a theme, 30+ DAX measures (SMME share, B-BBEE recognition, HHI, days-to-pay gap, value under review…) and the expected numbers to check against.
+
 ### Other business rules (with tests)
 
 - **Supplier onboarding:**
@@ -220,6 +270,9 @@ backend/
   migrations/     Alembic; schema lives in reviewed SQL files (migrations/sql)
   seed/           case_study.py (exact sample data) · synthetic.py (demo year + planted anomalies)
   tests/          pytest suite (real PostgreSQL)
+analytics/        dbt project (staging -> marts) + Dagster orchestration
+analysis/         Path B notebook, raw case-study CSVs, synthetic snapshot
+powerbi/          Power BI connection file, theme, DAX measures, build guide
 docs/             Architecture, ERD, design viewer
 .github/workflows CI
 ```
@@ -229,7 +282,7 @@ docs/             Architecture, ERD, design viewer
 1. ~~Foundation: schema, auth and roles, seed, Docker, CI~~
 2. ~~Invoice workflow: supplier submission, 3-way match, approval routing, SLA scheduler (Celery + Redis)~~
 3. ~~Risk engine: 8 explainable rules + Isolation Forest; investigation queue; precision/recall on labelled synthetic data; supplier scorecards~~
-4. Spend intelligence: dbt star schema + tests, Dagster, Power BI report, analysis notebook (Path B)
+4. ~~Spend intelligence: dbt star schema + tests, Dagster, Power BI report, analysis notebook (Path B)~~
 5. React + TypeScript frontend: internal console and supplier portal
 6. AWS deployment; Ask BlinkHub (LLM); certificate document AI
 

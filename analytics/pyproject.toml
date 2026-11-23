@@ -1,0 +1,32 @@
+[project]
+name = "blinkhub-analytics"
+version = "0.1.0"
+description = "BlinkHub Procurement Intelligence: dbt models orchestrated by Dagster"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "dbt-core>=1.9,<1.11",
+  "dbt-postgres>=1.9,<1.11",
+  "dagster>=1.9",
+  "dagster-webserver>=1.9",
+  "dagster-dbt>=0.25",
+]
+
+[dependency-groups]
+analysis = [
+    "ipykernel>=7.4.0",
+    "matplotlib>=3.11.2",
+    "nbconvert>=7.17.2",
+    "nbformat>=5.11.1",
+    "pandas>=3.1.1",
+]
+dev = ["pytest>=8.2"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.dagster]
+module_name = "orchestration.definitions"

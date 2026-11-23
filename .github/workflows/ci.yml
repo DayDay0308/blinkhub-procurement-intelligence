@@ -37,10 +37,42 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+  analytics:
+    name: dbt build + Dagster
+    runs-on: ubuntu-latest
+    needs: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blinkhub
+          POSTGRES_PASSWORD: blinkhub
+          POSTGRES_DB: blinkhub
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U blinkhub" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://blinkhub:blinkhub@localhost:5432/blinkhub
+      DBT_DBNAME: blinkhub
+      DAGSTER_HOME: /tmp/dagster
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: Migrate + seed (case study + synthetic year + risk scan)
+        working-directory: backend
+        run: uv sync --frozen && uv run alembic upgrade head && uv run python -m seed.run --synthetic
+      - name: dbt build (models + 40 data tests) and Dagster materialization
+        working-directory: analytics
+        run: mkdir -p $DAGSTER_HOME && uv sync --frozen && uv run pytest -q
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
-    needs: backend
+    needs: [backend, analytics]
     steps:
       - uses: actions/checkout@v4
       - run: docker compose build
