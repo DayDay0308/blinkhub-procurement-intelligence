@@ -18,71 +18,68 @@ MICS spends **R85m a year** across 450 suppliers, but its procurement data is sp
 
 ## 2. Solution overview
 
-A BlinkHub module with four capabilities:
+Three Blink modules on one PostgreSQL database:
 
-| Capability | Business problem | What it does |
+| Module | Business problem | What it does |
 |---|---|---|
-| **Invoice Tracker** | P4 | Suppliers submit invoices on a portal; 3-way match (PO ↔ GRN ↔ invoice); approval routing to a named approver; SLA clock and escalation; supplier sees payment status |
-| **Risk Engine** | P6 | Explainable rules + anomaly model produce *flags for investigation*, each with reason codes, assignment and case notes |
-| **Spend Intelligence** | P3, P2 | Automated dbt marts → dashboard: spend by department/supplier/category/province, concentration (HHI), SMME and B-BBEE share, budget burn, regional price variance |
-| **Ask BlinkHub** (AI) | P3 | Natural-language questions over the read-only analytics marts ("Which SMMEs have been waiting longest?") with SQL shown for transparency |
+| **P2P Control** (invoice tracker) | P4, P2 | Suppliers submit invoices on a portal (finance captures emailed ones); 3-way match (PO ↔ GRN ↔ invoice); routing to one named approver; 20 / 25 / 30-day SLA ladder; suppliers see status and owner |
+| **Supplier Performance & Risk** | P1, P5, P6 | Onboarding checks and duplicate detection; compliance documents with expiry tracking, upload, automatic reading and verification; A–E scorecards; explainable risk rules + anomaly model producing *flags for investigation* with evidence, assignment and case notes |
+| **Procurement Intelligence** | P3, P2 | Live dashboard and dbt marts → Power BI: spend by department/supplier/category/province, concentration (HHI), SMME and B-BBEE share, days-to-pay by supplier type. **Ask BlinkHub**: plain-English questions answered by one read-only SELECT over curated `ask` views, with the SQL shown |
 
 ## 3. Architecture
 
-```mermaid
-flowchart LR
-  subgraph Users
-    PO[Procurement Officer]
-    FO[Finance Officer / Approver]
-    MG[Manager]
-    AU[Auditor]
-    SU[Supplier]
-  end
+![Architecture: users, React frontend, FastAPI modules, Celery worker, PostgreSQL with ask views, document storage, dbt and Dagster to Power BI, optional Claude API](images/architecture.png)
 
-  subgraph Frontend["Frontend: React + TypeScript (Vite)"]
-    UI[Internal console<br/>dashboards, approvals, risk queue]
-    SP[Supplier portal<br/>submit and track invoices]
-  end
+[Open as SVG](images/architecture.svg) (zoomable)
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```mermaid
+flowchart TB
+  U["Users<br/>procurement, finance, approvers,<br/>managers, auditors, suppliers"]
+
+  FE["Web app: React + TypeScript, served by nginx<br/>staff console and supplier portal"]
 
   subgraph Backend["Backend: FastAPI modular monolith"]
     AUTH[Auth & RBAC<br/>JWT, role guards]
-    INV[Invoice module<br/>3-way match, state machine]
-    SUPM[Supplier & compliance module]
-    RISKAPI[Risk module<br/>flags, cases]
+    INV[Invoice module<br/>3-way match, routing, SLA]
+    SUPM[Supplier & compliance module<br/>onboarding, documents, reading]
+    RISKAPI[Risk module<br/>flags, cases, scorecards]
     ANA[Analytics API]
-    AI[Ask BlinkHub<br/>LLM text-to-SQL, guarded]
+    ASK[Ask BlinkHub<br/>guarded text-to-SQL]
   end
 
-  subgraph Workers["Async workers: Celery + Redis"]
-    W1[SLA & expiry scheduler]
-    W2[Risk engine runner<br/>rules + Isolation Forest]
-    W3[Notifications<br/>email / in-app]
-    W4[Document AI<br/>certificate extraction]
-  end
+  W["Worker: Celery + Redis<br/>SLA check every 15 min, risk scan 02:00,<br/>compliance check 06:00"]
 
   subgraph Data["Data layer"]
-    PG[(PostgreSQL 16<br/>core · p2p · compliance<br/>sourcing · risk · audit)]
+    PG[(PostgreSQL 16<br/>core, p2p, compliance,<br/>sourcing, risk, audit)]
+    ASKV[(ask views<br/>read-only login)]
     MARTS[(analytics schema<br/>dbt marts)]
-    S3[(MinIO / S3<br/>invoices, certificates)]
-    RD[(Redis<br/>queue + cache)]
+    DOCS[(Documents<br/>volume locally, S3 on AWS)]
   end
 
   subgraph Pipeline["Analytics pipeline"]
-    DG[Dagster orchestration]
-    DBT[dbt: staging → intermediate → marts<br/>+ data tests]
+    DG[Dagster, daily 03:00]
+    DBT[dbt: staging to marts<br/>+ 40 data tests]
   end
 
-  Users --> Frontend --> AUTH
-  AUTH --> INV & SUPM & RISKAPI & ANA & AI
-  INV & SUPM & RISKAPI --> PG
-  SUPM --> S3
-  INV --> RD --> Workers
-  Workers --> PG
-  W4 --> S3
+  AI[Claude API<br/>optional, with fallbacks]
+
+  U --> FE --> AUTH
+  AUTH --> INV & SUPM & RISKAPI & ANA & ASK
+  INV & SUPM & RISKAPI & ANA --> PG
+  SUPM --> DOCS
+  SUPM -.-> AI
+  ASK -.-> AI
+  ASK --> ASKV --> PG
+  W --> PG
   DG --> DBT --> MARTS
   PG --> DBT
-  ANA & AI --> MARTS
+  MARTS --> PBI[Power BI]
 ```
+
+</details>
 
 ### Key design decisions
 
@@ -95,7 +92,7 @@ flowchart LR
 | Risk detection | **Rules first, ML second** | Rules are explainable and auditable (needed when people's reputations are involved); Isolation Forest catches patterns no rule anticipated | ML gives a score, not a reason, so every ML flag is paired with the features that drove it |
 | Duplicate invoices | **Prevent + detect** | Unique index on (supplier, normalised invoice no.) blocks exact repeats at submission; fuzzy rule catches near-duplicates (same amount, same PO, different number) | Fuzzy matches produce some false positives; that is why they go to review, not auto-rejection |
 | Audit | **Append-only, hash-chained log** in Postgres | Any edited or deleted history breaks the chain, so tampering is detectable (fraud context) | Not a blockchain; trust still rests on DB administrators |
-| Documents | **Object storage (MinIO, S3-compatible)** + SHA-256 per file | DB stays small; identical file re-uploads detected | One extra container |
+| Documents | **Files outside the database** (a Docker volume locally, encrypted S3 on AWS) + SHA-256 per file | DB stays small; identical re-uploads are blocked; S3 adds encryption and versioning | Two storage paths to test (both are) |
 | Sensitive data | Bank account numbers **encrypted**; UI shows last 4 digits only | POPIA; bank-detail fraud is a named risk | Key management is simplified in the prototype |
 
 ## 4. Core business rules
@@ -153,17 +150,17 @@ KPIs without data are re-weighted. Suppliers with no activity are `N/A`, never r
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, TanStack Query, React Router, Tailwind + shadcn/ui, Recharts |
+| Frontend | React 18, TypeScript, Vite, TanStack Query, React Router, Tailwind CSS 4, Recharts, lucide icons; served by nginx |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic migrations |
-| Auth | JWT (access + refresh), role-based guards, supplier users row-scoped to their own supplier |
+| Auth | JWT access tokens (60 minutes, HS256), Argon2id password hashes, role-based guards, supplier users scoped to their own supplier |
 | Database | PostgreSQL 16 (pgcrypto, pg_trgm) |
-| Async | Celery + Redis (SLA scheduler, risk runs, notifications) |
+| Async | Celery + Redis (SLA check every 15 minutes, risk scan 02:00, compliance check 06:00) |
 | Analytics | dbt-core (dbt-postgres), Dagster |
-| ML / AI | scikit-learn Isolation Forest + NumPy (risk); LLM API for document extraction and Ask BlinkHub (Phase 6) |
-| Storage | MinIO (S3-compatible) |
-| Quality | pytest, Playwright (E2E), dbt tests, Ruff, mypy, ESLint |
-| Delivery | Docker Compose (one command), GitHub Actions CI (lint → test → build) |
-| Observability | Structured JSON logs, `/health` and `/metrics` endpoints |
+| ML / AI | scikit-learn Isolation Forest + NumPy (risk); Claude API (optional, with rule-based fallbacks) for certificate reading and Ask BlinkHub |
+| Storage | Uploaded documents in a Docker volume locally, Amazon S3 (encrypted, versioned) on AWS |
+| Quality | pytest on real PostgreSQL (130 tests), Vitest, dbt tests (40), Ruff, `tsc` type checks, an end-to-end demo check script |
+| Delivery | Docker Compose (one command); GitHub Actions CI (backend, analytics, frontend, Docker) and a manual deploy using OIDC; Terraform for AWS (EC2, S3, IAM, budget) with Caddy HTTPS |
+| Observability | Structured JSON logs with request IDs, `/health` endpoint; CloudWatch metrics and alarms are a production next step |
 
 ## 7. Roles and access
 
@@ -178,18 +175,22 @@ KPIs without data are re-weighted. Suppliers with no activity are `N/A`, never r
 
 ## 8. Delivery plan
 
+All phases are done:
+
 | Phase | Scope |
 |---|---|
-| 1. Foundation | Repo, Docker Compose, schema + migrations, synthetic data generator (sample data + expansion), auth |
-| 2. Invoice Tracker | Submission, 3-way match, approval routing, SLA scheduler, supplier status view |
-| 3. Risk Engine ✅ | Rules, Isolation Forest, flags API, investigation queue, precision/recall evaluation, supplier scorecards, synthetic demo year |
-| 4. Spend Intelligence | dbt marts + tests, Dagster, management dashboard |
-| 5. Stretch | Ask BlinkHub, certificate document AI, CI/CD polish |
-| 6. Presentation | Findings on the provided sample, demo script, limitations, next steps |
+| 1. Foundation | Repo, Docker Compose, schema + migrations, case-study seed, auth and roles, CI |
+| 2. Invoice tracker | Submission, 3-way match, approval routing, SLA scheduler, supplier status view |
+| 3. Risk engine | Rules, Isolation Forest, flags API, investigation queue, precision/recall evaluation, supplier scorecards, synthetic demo year |
+| 4. Spend intelligence | dbt marts + tests, Dagster, Power BI report, analysis notebook (Path B) |
+| 5. Web app | React staff console and supplier portal; supplier compliance documents |
+| 6. AI and cloud | Certificate reading, Ask BlinkHub, AWS deployment (Terraform, HTTPS, S3, OIDC deploy) |
+| 7. Presentation | Findings on the sample, live demo, limitations, next steps |
 
 ## 9. Limitations and assumptions
 
 - The sample has no dates, PO references on invoices, GRNs or quotations, so the synthetic expansion invents these, and every such assumption is documented.
 - A 30-day payment standard is assumed (common practice and the PFMA norm for the public sector; MICS's actual terms are unknown).
 - Risk thresholds are starting values, to be tuned with MICS data and auditor feedback.
-- Not production-grade: no SSO, simplified key management, single-node deployment.
+- Not production-grade: no SSO, simplified key management, single-server deployment (the production design is in `aws-deployment.md`).
+- Opportunities (SMME marketplace) and contracts exist in the data model and seed data, but have no screens yet.

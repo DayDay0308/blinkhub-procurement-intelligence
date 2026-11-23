@@ -6,6 +6,13 @@ client. Both run the same containers.
 
 ## 1. Demo deployment (what Terraform builds)
 
+![AWS demo deployment: Caddy, web, API, worker, PostgreSQL and Redis on one EC2 server in Cape Town, with S3, SSM, Session Manager, Budgets and GitHub OIDC deploys](images/aws-demo-deployment.png)
+
+[Open as SVG](images/aws-demo-deployment.svg) (zoomable)
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart LR
   user([Browser]) -->|HTTPS 443| caddy
@@ -27,6 +34,8 @@ flowchart LR
   api -.->|optional| claude[Claude API]
   gh[GitHub Actions<br/>Deploy button] -->|OIDC role, SSM command| ec2
 ```
+
+</details>
 
 | Choice | Why |
 |---|---|
@@ -57,7 +66,8 @@ Check current prices with the [AWS Pricing Calculator](https://calculator.aws/).
 ## 2. Step by step (Windows, no software to install)
 
 Everything runs in **AWS CloudShell**, a terminal inside the AWS console, so no AWS keys go
-on your laptop.
+on your laptop. CloudShell keeps a separate home folder per region: always run Terraform from
+the same CloudShell region (its `terraform.tfstate` lives there).
 
 **Before you start**
 
@@ -122,6 +132,12 @@ on your laptop.
    Actions → **Variables** add `AWS_DEPLOY_ROLE_ARN` (from `terraform output
    github_deploy_role_arn`), `AWS_INSTANCE_ID` (`terraform output instance_id`) and
    `AWS_REGION`. After pushing changes: Actions → **Deploy to AWS** → Run workflow.
+   If the first run fails with *Not authorized to perform sts:AssumeRoleWithWebIdentity*,
+   GitHub is sending its newer identity format with owner and repo IDs
+   (`repo:Owner@123/name@456:ref:refs/heads/main`). Find the exact value in CloudTrail
+   (`aws cloudtrail lookup-events --region <region> --lookup-attributes
+   AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity`), set it as
+   `github_oidc_subject` in `terraform.tfvars`, and `terraform apply` again.
 
 ## 3. Running it
 
@@ -141,6 +157,13 @@ reachable and occasionally rate-limits shared names like sslip.io; wait an hour,
 
 ## 4. Production target for a real client
 
+![AWS production target: CloudFront and WAF, load balancer, ECS Fargate API and worker, RDS Multi-AZ, S3 with KMS, Bedrock, Secrets Manager, CloudWatch](images/aws-production-target.png)
+
+[Open as SVG](images/aws-production-target.svg) (zoomable)
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart LR
   user([Users]) --> cf[CloudFront + WAF] --> alb[Application Load Balancer<br/>ACM certificate]
@@ -156,6 +179,8 @@ flowchart LR
   rds --> pbi[Power BI via<br/>on-premises data gateway]
   cw[CloudWatch logs, metrics, alarms]
 ```
+
+</details>
 
 What changes and why:
 

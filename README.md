@@ -4,14 +4,32 @@ A working prototype for the **BlinkHub Procurement Innovation Challenge** (MICS 
 
 > **All data is fictional.** The seed reproduces the case study's sample records exactly. On top of that, a **synthetic demonstration year** is generated (~450 suppliers, ~R85m, deterministic seed) with deliberately planted anomalies. It is labelled as synthetic everywhere and must never be presented as MICS's actual performance.
 
+> **Live demo:** https://16-28-164-172.sslip.io (click any demo user) · **API docs:** https://16-28-164-172.sslip.io/docs
+>
+> Candidate prototype for ProcureSense's BlinkHub Procurement Innovation Challenge. It is not an official ProcureSense or Blink product.
+
+## Start here (5 minutes)
+
+| To see | Open |
+|---|---|
+| It working | The [live demo](https://16-28-164-172.sslip.io): sign in as *Mpho, Manager*, then *Ubuntu Cleaning* (supplier portal) |
+| The business analysis (Path B) | [`analysis/01_procurement_analysis.ipynb`](analysis/01_procurement_analysis.ipynb): cleaning, 7 investigation questions, findings, recommendations |
+| Why it's built this way | [`docs/architecture.md`](docs/architecture.md) (design decisions, business rules, limitations) and [`docs/erd.md`](docs/erd.md) |
+| The dashboards | [`powerbi/`](powerbi/) (4-page report and screenshots) and the web app's dashboard |
+| How it runs in the cloud | [`docs/aws-deployment.md`](docs/aws-deployment.md) and [`infra/terraform`](infra/terraform) |
+| That it works | [`backend/tests`](backend/tests), [`scripts/demo_check.py`](scripts/demo_check.py) and the CI runs under *Actions* |
+
 ![CI](https://github.com/DayDay0308/blinkhub-procurement-intelligence/actions/workflows/ci.yml/badge.svg)
 
 ## Problems addressed
 
 | Case study problem | What this solves |
 |---|---|
+| 1. Supplier onboarding | CIPC, VAT and CSD format checks; exact duplicates blocked, similar names flagged for review; new suppliers start as *Pending* |
+| 2. SMME access | Supplier portal (invoice status, owner, documents, own scorecard); SMME share tracked against a target; overdue SMME invoices tagged as priority. The opportunities marketplace is in the data model; its screens are a next step |
 | 3. Where is the money? | Spend by department, supplier, category and province; SMME share; concentration |
 | 4. The invoice that never gets paid | Invoice ageing, 30-day SLA ladder, accountable approver, supplier self-service status |
+| 5. Contracts and documents | Tax clearance and B-BBEE tracked per supplier, 30-day expiry warnings, upload and verification, automatic reading of certificates. Contracts are in the data model; their screens are a next step |
 | 6. Something doesn't look right | Explainable risk flags in an investigation queue: 8 rules + an ML model, with measured precision/recall |
 | Blink: "track supplier performance" | Supplier scorecards: delivery, invoice accuracy, compliance, risk record, price |
 | 3. Where is the money? (Path B) | dbt star schema (40 data tests), Dagster schedule, **Power BI report**, analysis notebook answering the 7 investigation questions |
@@ -55,7 +73,11 @@ This runs the whole story against the running stack the way real users would:
 4. SLA alerts fire
 5. the risk scan flags the case-study duplicates, and detection rates hold
 6. scorecards are computed
-7. the dbt marts match the Power BI check numbers, and all 5 containers plus Dagster are up
+7. supplier compliance finds expired, missing and expiring documents, and reminders aren't repeated
+8. Ask BlinkHub answers on its read-only login, and suppliers can't use it
+9. the dbt marts match the Power BI check numbers, all 6 containers are up, and the web app reaches the API
+
+26 checks in total.
 
 It prints PASS or FAIL for each step, is safe to run repeatedly, and needs only the Python standard library.
 
@@ -102,9 +124,9 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-GitHub Actions runs lint, tests and a Docker build on every push.
+GitHub Actions runs four jobs on every push: **backend** (lint and 130 tests on PostgreSQL), **analytics** (dbt build with 40 data tests, then Dagster), **frontend** (type check, tests, build) and **Docker** image builds. A separate manual workflow, *Deploy to AWS*, updates the live server.
 
-## What's built so far
+## What's built
 
 ### Invoice workflow (Problem 4)
 
@@ -230,7 +252,7 @@ Every active supplier needs a **valid tax clearance** and a **B-BBEE certificate
 - **Daily check (06:00, Celery):** marks documents past their date as expired and reminds the supplier and procurement, once per document.
 - **Connected:** the `INCOMPLETE_COMPLIANCE` risk rule flags payments to suppliers without a valid tax clearance, and the scorecard's compliance KPI (20%) uses the same documents.
 - Endpoints: `GET /compliance/overview`, `GET|POST /suppliers/{id}/documents`, `POST /compliance/documents/{id}/verify|reject`, `GET /compliance/documents/{id}/file`, `POST /jobs/compliance-check`.
-- Files are stored in a Docker volume locally; on AWS they go to S3 (Phase 6).
+- Files are stored in a Docker volume locally; on AWS they go to S3.
 - **Test files:** `demo-documents/` has fictional certificates watermarked *DEMONSTRATION ONLY* (regenerate with `uv run --with reportlab python scripts/make_demo_documents.py`).
 
 Demo: sign in as **Thuto Supplies** → My documents (B-BBEE expired, tax clearance expiring in 12 days) → upload `demo-documents/Thuto_Supplies_BBBEE_Certificate_DEMO.pdf` → sign in as **Palesa (procurement)** → Supplier compliance → Check document → verify → Thuto is valid again.
@@ -302,7 +324,7 @@ The kit includes a one-click connection file (`.pbids`), a theme, 30+ DAX measur
   - The app refuses to start outside local/test with the default secret.
   - Errors use one consistent JSON format.
 
-### Web app (Phase 5)
+### Web app
 
 React + TypeScript (Vite), Tailwind CSS, TanStack Query, React Router and Recharts, served by nginx in Docker at **http://localhost:8080**. nginx proxies `/api` to the FastAPI container, so the browser talks to one origin.
 
@@ -334,7 +356,8 @@ Design choices: Public Sans with tabular figures; ink navy for structure; SMME o
 backend/
   app/            FastAPI app: api/ routes, core/ config+security+errors, models/, schemas/,
                   services/ (business rules: workflow, sla, suppliers, audit, scorecard,
-                  risk/ rules + ML + evaluation), worker.py (Celery)
+                  compliance, extraction, ask, storage, risk/ rules + ML + evaluation),
+                  worker.py (Celery)
   migrations/     Alembic; schema lives in reviewed SQL files (migrations/sql)
   seed/           case_study.py (exact sample data) · synthetic.py (demo year + planted anomalies)
   tests/          pytest suite (real PostgreSQL)
@@ -346,7 +369,7 @@ demo-documents/   Fictional certificates (watermarked) for testing uploads
 frontend/         React + TypeScript web app (Vite, Tailwind, TanStack Query), nginx Dockerfile
 powerbi/          Power BI connection file, theme, DAX measures, report (.pbix), screenshots
 docs/             Architecture, ERD, design viewer
-.github/workflows CI
+.github/workflows CI (4 jobs) and the manual AWS deploy
 ```
 
 ## Roadmap
@@ -357,6 +380,15 @@ docs/             Architecture, ERD, design viewer
 4. ~~Spend intelligence: dbt star schema + tests, Dagster, Power BI report, analysis notebook (Path B)~~
 5. ~~React + TypeScript frontend: internal console and supplier portal~~
 6. ~~AWS deployment kit (Terraform, HTTPS, S3, budget alert, OIDC deploy); Ask BlinkHub; certificate reading~~ (see [docs/aws-deployment.md](docs/aws-deployment.md))
+
+**Next steps**
+
+- Multi-tenancy: a `buyer_org_id` on every table with PostgreSQL row-level security, so many Blink buyers share one platform
+- Screens for opportunities (the SMME marketplace) and contracts, which are already in the data model
+- Read emailed invoices automatically, using the same document reading as certificates
+- Production AWS: ECS Fargate, RDS Multi-AZ, Secrets Manager, CloudFront with WAF, Claude through Amazon Bedrock
+- Staff single sign-on, and email or WhatsApp notifications
+- Test with MICS finance staff and SMME suppliers
 
 ## Assumptions and limitations
 
