@@ -8,6 +8,12 @@ A working prototype for the **BlinkHub Procurement Innovation Challenge** (MICS 
 >
 > Candidate prototype for ProcureSense's BlinkHub Procurement Innovation Challenge. It is not an official ProcureSense or Blink product.
 
+<p>
+  <a href="https://16-28-164-172.sslip.io"><img src="docs/images/qr-live-demo.png" alt="QR code: live demo" width="150"></a>
+  &nbsp;&nbsp;
+  <a href="https://github.com/DayDay0308/blinkhub-procurement-intelligence"><img src="docs/images/qr-github-repo.png" alt="QR code: GitHub repository" width="150"></a>
+</p>
+
 ## Start here (5 minutes)
 
 | To see | Open |
